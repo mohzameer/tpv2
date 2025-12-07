@@ -1,0 +1,33 @@
+{
+  "name": "thinkpost-new",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mohzameer/thinkpost-new.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/mohzameer/thinkpost-new/issues"
+  },
+  "homepage": "https://github.com/mohzameer/thinkpost-new#readme",
+  "devDependencies": {
+    "@vitejs/plugin-react": "^5.1.1",
+    "vite": "^7.2.4"
+  },
+  "dependencies": {
+    "@mantine/core": "^8.3.9",
+    "@mantine/hooks": "^8.3.9",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  }
+}
