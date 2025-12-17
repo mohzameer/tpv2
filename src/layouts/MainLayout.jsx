@@ -2,10 +2,19 @@ import { Outlet } from 'react-router-dom'
 import { AppShell } from '@mantine/core'
 import Header from '../components/Header'
 import Sidebar from '../components/Sidebar'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+
+const SIDEBAR_KEY = 'thinkpost_sidebar_open'
 
 export default function MainLayout() {
-  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [sidebarOpen, setSidebarOpen] = useState(() => {
+    const stored = localStorage.getItem(SIDEBAR_KEY)
+    return stored === null ? true : stored === 'true'
+  })
+
+  useEffect(() => {
+    localStorage.setItem(SIDEBAR_KEY, String(sidebarOpen))
+  }, [sidebarOpen])
   const [mode, setMode] = useState('both') // 'notes' | 'drawing' | 'both'
 
   return (

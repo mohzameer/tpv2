@@ -19,10 +19,15 @@ const schema = BlockNoteSchema.create({
   blockSpecs: markdownBlocks,
 })
 
+const defaultBlocks = [
+  { type: 'heading', props: { level: 2 }, content: 'Untitled' },
+  { type: 'paragraph', content: '' },
+]
+
 export default function NotesPanel({ docId }) {
   const [textMode, setTextMode] = useState('text')
   const [markdownText, setMarkdownText] = useState('')
-  const editor = useCreateBlockNote({ schema })
+  const editor = useCreateBlockNote({ schema, initialContent: defaultBlocks })
   const saveTimeout = useRef(null)
   const { colorScheme } = useTheme()
   const { setIsSyncing } = useSync()
@@ -38,12 +43,21 @@ export default function NotesPanel({ docId }) {
       const content = await getDocumentContent(docId)
       if (content?.notes_content && Array.isArray(content.notes_content) && content.notes_content.length > 0) {
         editor.replaceBlocks(editor.document, content.notes_content)
+      } else {
+        // Set default blocks for new document
+        editor.replaceBlocks(editor.document, defaultBlocks)
       }
       // Also load markdown if stored
-      if (content?.notes_content) {
-        const md = await editor.blocksToMarkdownLossy(editor.document)
-        setMarkdownText(md)
-      }
+      const md = await editor.blocksToMarkdownLossy(editor.document)
+      setMarkdownText(md)
+      
+      // Focus on second block
+      setTimeout(() => {
+        const blocks = editor.document
+        if (blocks.length > 1) {
+          editor.setTextCursorPosition(blocks[1].id, 'start')
+        }
+      }, 100)
     } catch (err) {
       console.error('Failed to load notes:', err)
     }
