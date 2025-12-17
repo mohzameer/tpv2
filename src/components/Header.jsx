@@ -125,7 +125,6 @@ export default function Header({ sidebarOpen, onToggleSidebar, mode, onModeChang
           <Menu.Dropdown>
             {user ? (
               <>
-                <Menu.Label>{user.email}</Menu.Label>
                 <Menu.Item leftSection={<IconSettings size={14} />} onClick={() => navigate('/settings')}>
                   Settings
                 </Menu.Item>
