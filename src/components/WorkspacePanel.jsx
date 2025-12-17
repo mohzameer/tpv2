@@ -1,12 +1,8 @@
-import { Box } from '@mantine/core'
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels'
 import NotesPanel from './NotesPanel'
 import DrawingPanel from './DrawingPanel'
 
-export default function WorkspacePanel({ mode, projectId, docId }) {
-  const showNotes = mode === 'notes' || mode === 'both'
-  const showDrawing = mode === 'drawing' || mode === 'both'
-
+export default function WorkspacePanel({ mode, layoutRatio, onRatioChange, projectId, docId }) {
   if (mode === 'notes') {
     return <NotesPanel key={docId} docId={docId} />
   }
@@ -17,8 +13,16 @@ export default function WorkspacePanel({ mode, projectId, docId }) {
 
   // Both mode - resizable split
   return (
-    <PanelGroup direction="horizontal" style={{ height: '100%' }}>
-      <Panel defaultSize={50} minSize={20}>
+    <PanelGroup 
+      direction="horizontal" 
+      style={{ height: '100%' }}
+      onLayout={(sizes) => {
+        if (sizes[0] !== layoutRatio) {
+          onRatioChange(sizes[0])
+        }
+      }}
+    >
+      <Panel defaultSize={layoutRatio} minSize={20}>
         <NotesPanel key={`notes-${docId}`} docId={docId} />
       </Panel>
       <PanelResizeHandle style={{ 
@@ -26,7 +30,7 @@ export default function WorkspacePanel({ mode, projectId, docId }) {
         background: 'var(--mantine-color-gray-3)',
         cursor: 'col-resize'
       }} />
-      <Panel defaultSize={50} minSize={20}>
+      <Panel defaultSize={100 - layoutRatio} minSize={20}>
         <DrawingPanel key={`drawing-${docId}`} docId={docId} />
       </Panel>
     </PanelGroup>

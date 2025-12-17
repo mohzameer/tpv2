@@ -30,6 +30,7 @@ export default function NotesPanel({ docId }) {
   const editor = useCreateBlockNote({ schema, initialContent: defaultBlocks })
   const saveTimeout = useRef(null)
   const lastSavedContent = useRef(null)
+  const lastSavedTextMode = useRef(null)
   const { colorScheme } = useTheme()
   const { setIsSyncing } = useSync()
 
@@ -49,6 +50,14 @@ export default function NotesPanel({ docId }) {
         // Set default blocks for new document
         editor.replaceBlocks(editor.document, defaultBlocks)
         lastSavedContent.current = JSON.stringify(defaultBlocks)
+      }
+      // Load text mode
+      if (content?.text_mode) {
+        setTextMode(content.text_mode)
+        lastSavedTextMode.current = content.text_mode
+      } else {
+        setTextMode('text')
+        lastSavedTextMode.current = 'text'
       }
       // Also load markdown if stored
       const md = await editor.blocksToMarkdownLossy(editor.document)
@@ -101,6 +110,15 @@ export default function NotesPanel({ docId }) {
       saveContent()
     }
     setTextMode(newMode)
+    // Save text mode preference
+    if (newMode !== lastSavedTextMode.current) {
+      lastSavedTextMode.current = newMode
+      try {
+        await updateDocumentContent(docId, { text_mode: newMode })
+      } catch (err) {
+        console.error('Failed to save text mode:', err)
+      }
+    }
   }
 
   async function handleMarkdownChange(value) {

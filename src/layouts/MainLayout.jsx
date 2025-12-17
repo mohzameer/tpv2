@@ -32,7 +32,11 @@ export default function MainLayout() {
           sidebarOpen={sidebarOpen} 
           onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
           mode={mode}
-          onModeChange={setMode}
+          onModeChange={(newMode) => {
+            setMode(newMode)
+            // Dispatch event for DocumentPage to handle
+            window.dispatchEvent(new CustomEvent('modeChange', { detail: newMode }))
+          }}
         />
       </AppShell.Header>
 
@@ -41,7 +45,7 @@ export default function MainLayout() {
       </AppShell.Navbar>
 
       <AppShell.Main style={{ height: 'calc(100vh - 50px)', overflow: 'hidden' }}>
-        <Outlet context={{ mode }} />
+        <Outlet context={{ mode, setMode }} />
       </AppShell.Main>
     </AppShell>
   )
