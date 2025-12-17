@@ -1,40 +1,23 @@
-import { useState } from 'react'
-import { Button } from '@mantine/core'
-import './App.css'
+import { Routes, Route } from 'react-router-dom'
+import MainLayout from './layouts/MainLayout'
+import HomePage from './pages/HomePage'
+import ProjectPage from './pages/ProjectPage'
+import DocumentPage from './pages/DocumentPage'
+import LoginPage from './pages/LoginPage'
+import SettingsPage from './pages/SettingsPage'
 
 function App() {
-  const [count, setCount] = useState(0)
-
   return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src="/vite.svg" className="logo" alt="Vite logo" />
-        </a>
-      </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.jsx</code> and save to test HMR
-        </p>
-        <Button 
-          variant="filled" 
-          color="blue" 
-          size="md"
-          style={{ marginTop: '1rem' }}
-        >
-          Mantine Button
-        </Button>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
+    <Routes>
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="/settings" element={<SettingsPage />} />
+      <Route element={<MainLayout />}>
+        <Route path="/" element={<HomePage />} />
+        <Route path="/:projectId" element={<ProjectPage />} />
+        <Route path="/:projectId/:docId" element={<DocumentPage />} />
+      </Route>
+    </Routes>
   )
 }
 
 export default App
-

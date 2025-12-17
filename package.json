@@ -25,9 +25,19 @@
     "vite": "^7.2.4"
   },
   "dependencies": {
+    "@blocknote/core": "^0.44.2",
+    "@blocknote/mantine": "^0.44.2",
+    "@blocknote/react": "^0.44.2",
+    "@blocknote/server-util": "^0.44.2",
+    "@excalidraw/excalidraw": "^0.18.0",
     "@mantine/core": "^8.3.9",
     "@mantine/hooks": "^8.3.9",
+    "@supabase/supabase-js": "^2.88.0",
+    "@tabler/icons-react": "^3.36.0",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "react-dom": "^19.2.0",
+    "react-resizable-panels": "^2.1.7",
+    "react-router-dom": "^7.10.1",
+    "ulid": "^3.0.2"
   }
 }

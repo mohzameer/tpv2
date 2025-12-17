@@ -1,0 +1,110 @@
+import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { Container, Paper, TextInput, PasswordInput, Button, Title, Stack, Alert, Group, Divider } from '@mantine/core'
+import { useAuth } from '../context/AuthContext'
+
+export default function SettingsPage() {
+  const { user, updateProfile, signOut } = useAuth()
+  const navigate = useNavigate()
+  
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [message, setMessage] = useState('')
+
+  function validatePassword(pwd) {
+    if (pwd.length < 8) return 'Password must be at least 8 characters'
+    if (!/[A-Z]/.test(pwd)) return 'Password must contain an uppercase letter'
+    if (!/[a-z]/.test(pwd)) return 'Password must contain a lowercase letter'
+    if (!/[0-9]/.test(pwd)) return 'Password must contain a number'
+    if (!/[!@#$%^&*(),.?":{}|<>]/.test(pwd)) return 'Password must contain a symbol'
+    return null
+  }
+
+  async function handleUpdatePassword(e) {
+    e.preventDefault()
+    if (newPassword !== confirmPassword) {
+      setError('Passwords do not match')
+      return
+    }
+    
+    const pwdError = validatePassword(newPassword)
+    if (pwdError) {
+      setError(pwdError)
+      return
+    }
+    
+    setError('')
+    setMessage('')
+    setLoading(true)
+
+    try {
+      await updateProfile({ password: newPassword })
+      setMessage('Password updated successfully')
+      setNewPassword('')
+      setConfirmPassword('')
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleSignOut() {
+    await signOut()
+    navigate('/login')
+  }
+
+  return (
+    <Container size={500} my={40}>
+      <Title fw={600} mb="lg">Settings</Title>
+
+      <Paper withBorder shadow="md" p={30} radius="md">
+        <Stack>
+          <TextInput
+            label="Email"
+            value={user?.email || ''}
+            disabled
+          />
+
+          <Divider my="sm" label="Change Password" labelPosition="center" />
+
+          <form onSubmit={handleUpdatePassword}>
+            <Stack>
+              {error && <Alert color="red">{error}</Alert>}
+              {message && <Alert color="green">{message}</Alert>}
+              
+              <PasswordInput
+                label="New Password"
+                placeholder="Enter new password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+              />
+              <PasswordInput
+                label="Confirm Password"
+                placeholder="Confirm new password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+              />
+              <Button type="submit" loading={loading} disabled={!newPassword}>
+                Update Password
+              </Button>
+            </Stack>
+          </form>
+
+          <Divider my="sm" />
+
+          <Group justify="space-between">
+            <Button variant="subtle" onClick={() => navigate('/')}>
+              Back to App
+            </Button>
+            <Button color="red" variant="outline" onClick={handleSignOut}>
+              Sign Out
+            </Button>
+          </Group>
+        </Stack>
+      </Paper>
+    </Container>
+  )
+}
