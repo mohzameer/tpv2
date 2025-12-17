@@ -8,18 +8,18 @@ export default function WorkspacePanel({ mode, projectId, docId }) {
   const showDrawing = mode === 'drawing' || mode === 'both'
 
   if (mode === 'notes') {
-    return <NotesPanel docId={docId} />
+    return <NotesPanel key={docId} docId={docId} />
   }
 
   if (mode === 'drawing') {
-    return <DrawingPanel docId={docId} />
+    return <DrawingPanel key={docId} docId={docId} />
   }
 
   // Both mode - resizable split
   return (
     <PanelGroup direction="horizontal" style={{ height: '100%' }}>
       <Panel defaultSize={50} minSize={20}>
-        <NotesPanel docId={docId} />
+        <NotesPanel key={`notes-${docId}`} docId={docId} />
       </Panel>
       <PanelResizeHandle style={{ 
         width: 4, 
@@ -27,7 +27,7 @@ export default function WorkspacePanel({ mode, projectId, docId }) {
         cursor: 'col-resize'
       }} />
       <Panel defaultSize={50} minSize={20}>
-        <DrawingPanel docId={docId} />
+        <DrawingPanel key={`drawing-${docId}`} docId={docId} />
       </Panel>
     </PanelGroup>
   )

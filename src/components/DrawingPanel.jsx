@@ -9,6 +9,7 @@ export default function DrawingPanel({ docId }) {
   const [initialData, setInitialData] = useState(null)
   const saveTimeout = useRef(null)
   const excalidrawRef = useRef(null)
+  const lastSavedContent = useRef(null)
   const { colorScheme } = useTheme()
   const { setIsSyncing } = useSync()
 
@@ -22,8 +23,11 @@ export default function DrawingPanel({ docId }) {
       const content = await getDocumentContent(docId)
       if (content?.drawing_content && Object.keys(content.drawing_content).length > 0) {
         setInitialData(content.drawing_content)
+        lastSavedContent.current = JSON.stringify(content.drawing_content)
       } else {
-        setInitialData({ elements: [], appState: {} })
+        const defaultData = { elements: [], appState: {} }
+        setInitialData(defaultData)
+        lastSavedContent.current = JSON.stringify(defaultData)
       }
     } catch (err) {
       console.error('Failed to load drawing:', err)
@@ -40,11 +44,14 @@ export default function DrawingPanel({ docId }) {
 
   async function saveContent(elements, appState) {
     if (!docId) return
+    const newContent = { elements, appState: { viewBackgroundColor: appState.viewBackgroundColor } }
+    const currentContent = JSON.stringify(newContent)
+    if (currentContent === lastSavedContent.current) return
+    
     try {
       setIsSyncing(true)
-      await updateDocumentContent(docId, { 
-        drawing_content: { elements, appState: { viewBackgroundColor: appState.viewBackgroundColor } }
-      })
+      await updateDocumentContent(docId, { drawing_content: newContent })
+      lastSavedContent.current = currentContent
     } catch (err) {
       console.error('Failed to save drawing:', err)
     } finally {

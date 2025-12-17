@@ -37,11 +37,14 @@ export default function Header({ sidebarOpen, onToggleSidebar, mode, onModeChang
     <Group h="100%" px="md" justify="space-between">
       <Group>
         <img 
-          src="/logo.png" 
+          src="/logo.svg" 
           alt="ThinkPost" 
           height={28} 
           onClick={onToggleSidebar}
-          style={{ cursor: 'pointer' }}
+          style={{ 
+            cursor: 'pointer',
+            filter: colorScheme === 'dark' ? 'invert(1)' : 'none'
+          }}
         />
         {project && (
           <>
@@ -59,7 +62,11 @@ export default function Header({ sidebarOpen, onToggleSidebar, mode, onModeChang
               <Text 
                 size="sm" 
                 fw={500} 
-                onDoubleClick={handleDoubleClick}
+                onClick={onToggleSidebar}
+                onDoubleClick={(e) => {
+                  e.stopPropagation()
+                  handleDoubleClick()
+                }}
                 style={{ cursor: 'pointer' }}
               >
                 {project.name}

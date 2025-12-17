@@ -29,6 +29,7 @@ export default function NotesPanel({ docId }) {
   const [markdownText, setMarkdownText] = useState('')
   const editor = useCreateBlockNote({ schema, initialContent: defaultBlocks })
   const saveTimeout = useRef(null)
+  const lastSavedContent = useRef(null)
   const { colorScheme } = useTheme()
   const { setIsSyncing } = useSync()
 
@@ -43,9 +44,11 @@ export default function NotesPanel({ docId }) {
       const content = await getDocumentContent(docId)
       if (content?.notes_content && Array.isArray(content.notes_content) && content.notes_content.length > 0) {
         editor.replaceBlocks(editor.document, content.notes_content)
+        lastSavedContent.current = JSON.stringify(content.notes_content)
       } else {
         // Set default blocks for new document
         editor.replaceBlocks(editor.document, defaultBlocks)
+        lastSavedContent.current = JSON.stringify(defaultBlocks)
       }
       // Also load markdown if stored
       const md = await editor.blocksToMarkdownLossy(editor.document)
@@ -72,9 +75,13 @@ export default function NotesPanel({ docId }) {
 
   async function saveContent() {
     if (!docId) return
+    const currentContent = JSON.stringify(editor.document)
+    if (currentContent === lastSavedContent.current) return
+    
     try {
       setIsSyncing(true)
       await updateDocumentContent(docId, { notes_content: editor.document })
+      lastSavedContent.current = currentContent
     } catch (err) {
       console.error('Failed to save notes:', err)
     } finally {

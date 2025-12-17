@@ -1,5 +1,5 @@
 import { Stack, ActionIcon, Loader, Center, Box, Group, Text, TextInput } from '@mantine/core'
-import { IconFile, IconPlus } from '@tabler/icons-react'
+import { IconFile, IconPlus, IconChevronLeft } from '@tabler/icons-react'
 import './Sidebar.css'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useEffect, useState } from 'react'
@@ -21,7 +21,7 @@ function formatDate(dateString) {
   return date.toLocaleDateString()
 }
 
-export default function Sidebar() {
+export default function Sidebar({ onCollapse }) {
   const navigate = useNavigate()
   const { docId } = useParams()
   const { project, documents, loading, addDocument, refreshDocuments } = useProjectContext()
@@ -79,54 +79,68 @@ export default function Sidebar() {
     )
   }
 
+  const sortedDocuments = [...documents].sort((a, b) => 
+    new Date(b.updated_at) - new Date(a.updated_at)
+  )
+
   return (
     <Stack p="sm" gap="xs" style={{ height: '100%' }}>
-      {documents.map((doc) => {
-        const isActive = docId !== undefined && String(docId) === String(doc.id)
-        console.log('docId:', docId, 'doc.id:', doc.id, 'isActive:', isActive)
-        return (
-          <Box
-            key={doc.id}
-            onClick={() => navigate(`/${project.id}/${doc.id}`)}
-            onDoubleClick={() => handleDoubleClick(doc)}
-            p="xs"
-            className="sidebar-item"
-            data-active={isActive}
-          >
-            <Group gap="xs">
-              <IconFile size={16} color="var(--mantine-color-gray-6)" />
-              <div style={{ flex: 1 }}>
-                {editingId === doc.id ? (
-                  <TextInput
-                    value={editingTitle}
-                    onChange={(e) => setEditingTitle(e.target.value)}
-                    onBlur={handleRename}
-                    onKeyDown={handleKeyDown}
-                    size="xs"
-                    autoFocus
-                    onClick={(e) => e.stopPropagation()}
-                    onDoubleClick={(e) => e.stopPropagation()}
-                  />
-                ) : (
-                  <>
-                    <Text size="sm" fw={isActive ? 500 : 400}>{doc.title}</Text>
-                    <Text size="xs" c="dimmed">{formatDate(doc.updated_at)}</Text>
-                  </>
-                )}
-              </div>
-            </Group>
-          </Box>
-        )
-      })}
-      <ActionIcon 
-        variant="outline" 
-        color="gray" 
-        size="lg" 
-        onClick={handleAddDocument}
-        style={{ marginTop: 'auto', alignSelf: 'flex-end' }}
-      >
-        <IconPlus size={18} />
-      </ActionIcon>
+      <Stack gap="xs" style={{ flex: 1 }}>
+        {sortedDocuments.map((doc) => {
+          const isActive = docId !== undefined && String(docId) === String(doc.id)
+          return (
+            <Box
+              key={doc.id}
+              onClick={() => navigate(`/${project.id}/${doc.id}`)}
+              onDoubleClick={() => handleDoubleClick(doc)}
+              p="xs"
+              className="sidebar-item"
+              data-active={isActive}
+            >
+              <Group gap="xs">
+                <IconFile size={16} color="var(--mantine-color-gray-6)" />
+                <div style={{ flex: 1 }}>
+                  {editingId === doc.id ? (
+                    <TextInput
+                      value={editingTitle}
+                      onChange={(e) => setEditingTitle(e.target.value)}
+                      onBlur={handleRename}
+                      onKeyDown={handleKeyDown}
+                      size="xs"
+                      autoFocus
+                      onClick={(e) => e.stopPropagation()}
+                      onDoubleClick={(e) => e.stopPropagation()}
+                    />
+                  ) : (
+                    <>
+                      <Text size="sm" fw={isActive ? 500 : 400}>{doc.title}</Text>
+                      <Text size="xs" c="dimmed">{formatDate(doc.updated_at)}</Text>
+                    </>
+                  )}
+                </div>
+              </Group>
+            </Box>
+          )
+        })}
+      </Stack>
+      <Group justify="space-between">
+        <ActionIcon 
+          variant="subtle" 
+          color="gray" 
+          size="md" 
+          onClick={onCollapse}
+        >
+          <IconChevronLeft size={16} />
+        </ActionIcon>
+        <ActionIcon 
+          variant="subtle" 
+          color="gray" 
+          size="md" 
+          onClick={handleAddDocument}
+        >
+          <IconPlus size={16} />
+        </ActionIcon>
+      </Group>
     </Stack>
   )
 }

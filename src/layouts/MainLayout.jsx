@@ -37,7 +37,7 @@ export default function MainLayout() {
       </AppShell.Header>
 
       <AppShell.Navbar>
-        <Sidebar />
+        <Sidebar onCollapse={() => setSidebarOpen(false)} />
       </AppShell.Navbar>
 
       <AppShell.Main style={{ height: 'calc(100vh - 50px)', overflow: 'hidden' }}>
