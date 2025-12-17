@@ -1,0 +1,17 @@
+.sidebar-item {
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.sidebar-item:hover {
+  background-color: var(--mantine-color-gray-1);
+}
+
+.sidebar-item[data-active="true"] {
+  background-color: var(--mantine-color-gray-2);
+}
+
+.sidebar-item[data-active="true"]:hover {
+  background-color: var(--mantine-color-gray-2);
+}

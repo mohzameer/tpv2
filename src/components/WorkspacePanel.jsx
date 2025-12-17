@@ -1,0 +1,34 @@
+import { Box } from '@mantine/core'
+import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels'
+import NotesPanel from './NotesPanel'
+import DrawingPanel from './DrawingPanel'
+
+export default function WorkspacePanel({ mode, projectId, docId }) {
+  const showNotes = mode === 'notes' || mode === 'both'
+  const showDrawing = mode === 'drawing' || mode === 'both'
+
+  if (mode === 'notes') {
+    return <NotesPanel docId={docId} />
+  }
+
+  if (mode === 'drawing') {
+    return <DrawingPanel docId={docId} />
+  }
+
+  // Both mode - resizable split
+  return (
+    <PanelGroup direction="horizontal" style={{ height: '100%' }}>
+      <Panel defaultSize={50} minSize={20}>
+        <NotesPanel docId={docId} />
+      </Panel>
+      <PanelResizeHandle style={{ 
+        width: 4, 
+        background: 'var(--mantine-color-gray-3)',
+        cursor: 'col-resize'
+      }} />
+      <Panel defaultSize={50} minSize={20}>
+        <DrawingPanel docId={docId} />
+      </Panel>
+    </PanelGroup>
+  )
+}
