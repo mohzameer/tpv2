@@ -1,17 +1,23 @@
-import { Group, SegmentedControl, Box, ActionIcon, Loader, Text, TextInput } from '@mantine/core'
-import { IconSun, IconMoon, IconUser, IconCloud } from '@tabler/icons-react'
+import { Group, SegmentedControl, Box, ActionIcon, Loader, Text, TextInput, Menu } from '@mantine/core'
+import { IconSun, IconMoon, IconUser, IconCloud, IconSettings, IconLogout, IconLogin } from '@tabler/icons-react'
 import { useTheme } from '../context/ThemeContext'
 import { useSync } from '../context/SyncContext'
 import { useProjectContext } from '../context/ProjectContext'
+import { useAuth } from '../context/AuthContext'
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import LoginModal from './LoginModal'
 
 export default function Header({ sidebarOpen, onToggleSidebar, mode, onModeChange }) {
   const { colorScheme, toggleColorScheme } = useTheme()
   const { isSyncing } = useSync()
   const { project, refreshDocuments } = useProjectContext()
+  const { user, signOut } = useAuth()
+  const navigate = useNavigate()
   const [editing, setEditing] = useState(false)
   const [projectName, setProjectName] = useState('')
+  const [showLoginModal, setShowLoginModal] = useState(false)
 
   function handleDoubleClick() {
     if (project) {
@@ -104,9 +110,38 @@ export default function Header({ sidebarOpen, onToggleSidebar, mode, onModeChang
         >
           {colorScheme === 'dark' ? <IconSun size={20} color="#fbbf24" /> : <IconMoon size={20} color="#6b7280" />}
         </ActionIcon>
-        <ActionIcon variant="transparent" size="lg">
-          <IconUser size={20} color={colorScheme === 'dark' ? '#9ca3af' : '#6b7280'} />
-        </ActionIcon>
+        <Menu shadow="md" width={200}>
+          <Menu.Target>
+            <ActionIcon variant="transparent" size="lg">
+              <IconUser size={20} color={colorScheme === 'dark' ? '#9ca3af' : '#6b7280'} />
+            </ActionIcon>
+          </Menu.Target>
+          <Menu.Dropdown>
+            {user ? (
+              <>
+                <Menu.Label>{user.email}</Menu.Label>
+                <Menu.Item leftSection={<IconSettings size={14} />} onClick={() => navigate('/settings')}>
+                  Settings
+                </Menu.Item>
+                <Menu.Divider />
+                <Menu.Item 
+                  color="red" 
+                  leftSection={<IconLogout size={14} />} 
+                  onClick={async () => {
+                    await signOut()
+                  }}
+                >
+                  Sign out
+                </Menu.Item>
+              </>
+            ) : (
+              <Menu.Item leftSection={<IconLogin size={14} />} onClick={() => setShowLoginModal(true)}>
+                Sign in
+              </Menu.Item>
+            )}
+          </Menu.Dropdown>
+        </Menu>
+        <LoginModal opened={showLoginModal} onClose={() => setShowLoginModal(false)} />
       </Group>
     </Group>
   )

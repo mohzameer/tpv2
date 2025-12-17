@@ -8,16 +8,19 @@ import './index.css'
 import { ProjectProvider } from './context/ProjectContext.jsx'
 import { ThemeProvider } from './context/ThemeContext.jsx'
 import { SyncProvider } from './context/SyncContext.jsx'
+import { AuthProvider } from './context/AuthContext.jsx'
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <BrowserRouter>
       <ThemeProvider>
-        <SyncProvider>
-          <ProjectProvider>
-            <App />
-          </ProjectProvider>
-        </SyncProvider>
+        <AuthProvider>
+          <SyncProvider>
+            <ProjectProvider>
+              <App />
+            </ProjectProvider>
+          </SyncProvider>
+        </AuthProvider>
       </ThemeProvider>
     </BrowserRouter>
   </React.StrictMode>,

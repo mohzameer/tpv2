@@ -25,7 +25,7 @@
 
 | # | Task | Status |
 |---|------|--------|
-| 2.1 | Implement Supabase Auth (email/password or magic link) with login/logout UI | ⬜ |
+| 2.1 | Implement Supabase Auth (email/password or magic link) with login/logout UI | ✅ |
 | 2.2 | Protect routes: redirect unauthenticated users to `/login` | ⬜ |
 | 2.3 | Create `project_memberships` table & RLS policies for Owner/Editor/Viewer roles | ⬜ |
 | 2.4 | Build invite collaborator flow (search existing users, assign role) | ⬜ |
