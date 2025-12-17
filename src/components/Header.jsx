@@ -1,5 +1,5 @@
 import { Group, SegmentedControl, Box, ActionIcon, Loader, Text, TextInput, Menu } from '@mantine/core'
-import { IconSun, IconMoon, IconUser, IconCloud, IconSettings, IconLogout, IconLogin } from '@tabler/icons-react'
+import { IconSun, IconMoon, IconUser, IconCloud, IconSettings, IconLogout, IconLogin, IconFolder } from '@tabler/icons-react'
 import { useTheme } from '../context/ThemeContext'
 import { useSync } from '../context/SyncContext'
 import { useProjectContext } from '../context/ProjectContext'
@@ -8,6 +8,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import LoginModal from './LoginModal'
+import ProjectsModal from './ProjectsModal'
 
 export default function Header({ sidebarOpen, onToggleSidebar, mode, onModeChange }) {
   const { colorScheme, toggleColorScheme } = useTheme()
@@ -18,6 +19,7 @@ export default function Header({ sidebarOpen, onToggleSidebar, mode, onModeChang
   const [editing, setEditing] = useState(false)
   const [projectName, setProjectName] = useState('')
   const [showLoginModal, setShowLoginModal] = useState(false)
+  const [showProjectsModal, setShowProjectsModal] = useState(false)
 
   function handleDoubleClick() {
     if (project) {
@@ -78,8 +80,12 @@ export default function Header({ sidebarOpen, onToggleSidebar, mode, onModeChang
                 {project.name}
               </Text>
             )}
+            <ActionIcon variant="transparent" size="sm" onClick={() => setShowProjectsModal(true)}>
+              <IconFolder size={18} color={colorScheme === 'dark' ? '#9ca3af' : '#6b7280'} />
+            </ActionIcon>
           </>
         )}
+        <ProjectsModal opened={showProjectsModal} onClose={() => setShowProjectsModal(false)} />
       </Group>
 
       <Box style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)' }}>

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { getProjects, createProject, getDocuments, createDocument, deleteProject } from '../lib/api'
+import { getLastVisited } from '../lib/lastVisited'
 
 export function useProject() {
   const [project, setProject] = useState(null)
@@ -75,5 +76,27 @@ export function useProject() {
     setDocuments(docs)
   }
 
-  return { project, documents, loading, addDocument, refreshDocuments, resetProject }
+  async function switchProject(projectId) {
+    setLoading(true)
+    try {
+      const projects = await getProjects()
+      const targetProject = projects.find(p => p.id === projectId)
+      if (!targetProject) return
+      
+      setProject(targetProject)
+      
+      let docs = await getDocuments(targetProject.id)
+      if (docs.length === 0) {
+        const newDoc = await createDocument(targetProject.id, 'Untitled')
+        docs = [newDoc]
+      }
+      setDocuments(docs)
+    } catch (err) {
+      console.error('Failed to switch project:', err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return { project, documents, loading, addDocument, refreshDocuments, resetProject, switchProject }
 }

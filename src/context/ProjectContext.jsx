@@ -13,5 +13,6 @@ export function ProjectProvider({ children }) {
 }
 
 export function useProjectContext() {
-  return useContext(ProjectContext)
+  const context = useContext(ProjectContext)
+  return context || {}
 }
