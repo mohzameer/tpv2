@@ -1,4 +1,4 @@
-import { Box, SegmentedControl, Textarea } from '@mantine/core'
+import { Box, SegmentedControl, Textarea, Loader, Center } from '@mantine/core'
 import { BlockNoteSchema, defaultBlockSpecs } from '@blocknote/core'
 import { useCreateBlockNote } from '@blocknote/react'
 import { BlockNoteView } from '@blocknote/mantine'
@@ -27,6 +27,7 @@ const defaultBlocks = [
 export default function NotesPanel({ docId }) {
   const [textMode, setTextMode] = useState('text')
   const [markdownText, setMarkdownText] = useState('')
+  const [loading, setLoading] = useState(true)
   const editor = useCreateBlockNote({ schema, initialContent: defaultBlocks })
   const saveTimeout = useRef(null)
   const lastSavedContent = useRef(null)
@@ -37,6 +38,7 @@ export default function NotesPanel({ docId }) {
   // Load content when docId changes
   useEffect(() => {
     if (!docId) return
+    setLoading(true)
     loadContent()
   }, [docId])
 
@@ -72,6 +74,8 @@ export default function NotesPanel({ docId }) {
       }, 100)
     } catch (err) {
       console.error('Failed to load notes:', err)
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -130,6 +134,14 @@ export default function NotesPanel({ docId }) {
       editor.replaceBlocks(editor.document, blocks)
       saveContent()
     }, 1000)
+  }
+
+  if (loading) {
+    return (
+      <Center style={{ height: '100%' }}>
+        <Loader size="md" />
+      </Center>
+    )
   }
 
   return (

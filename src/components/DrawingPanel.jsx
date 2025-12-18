@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { getDocumentContent, updateDocumentContent } from '../lib/api'
 import { useTheme } from '../context/ThemeContext'
 import { useSync } from '../context/SyncContext'
+import { Loader, Center } from '@mantine/core'
 
 export default function DrawingPanel({ docId }) {
   const [initialData, setInitialData] = useState(null)
@@ -59,7 +60,13 @@ export default function DrawingPanel({ docId }) {
     }
   }
 
-  if (!initialData) return null
+  if (!initialData) {
+    return (
+      <Center style={{ height: '100%' }}>
+        <Loader size="md" />
+      </Center>
+    )
+  }
 
   return (
     <div style={{ height: '100%', width: '100%', position: 'relative' }}>
