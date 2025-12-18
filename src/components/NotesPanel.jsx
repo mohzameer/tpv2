@@ -42,6 +42,55 @@ export default function NotesPanel({ docId }) {
     loadContent()
   }, [docId])
 
+  // Listen for AI text insertion requests
+  useEffect(() => {
+    function handleTextInsertion(event) {
+      if (!docId) return
+
+      const { text, blockType = 'paragraph', level = 1 } = event.detail
+      if (!text) return
+
+      try {
+        // Get current blocks
+        const currentBlocks = editor.document
+        
+        // Create new block based on type
+        let newBlock
+        if (blockType === 'heading') {
+          newBlock = {
+            type: 'heading',
+            props: { level },
+            content: text,
+          }
+        } else {
+          newBlock = {
+            type: 'paragraph',
+            content: text,
+          }
+        }
+
+        // Insert at the end of document
+        const lastBlockId = currentBlocks[currentBlocks.length - 1]?.id
+        if (lastBlockId) {
+          editor.insertBlocks([newBlock], lastBlockId, 'after')
+        } else {
+          // If no blocks, replace all
+          editor.replaceBlocks(editor.document, [newBlock])
+        }
+
+        // Trigger save
+        saveContent()
+      } catch (error) {
+        console.error('[NotesPanel] Failed to insert text:', error)
+      }
+    }
+
+    window.addEventListener('ai-insert-text', handleTextInsertion)
+    return () => {
+      window.removeEventListener('ai-insert-text', handleTextInsertion)
+    }
+  }, [docId])
+
   async function loadContent() {
     try {
       const content = await getDocumentContent(docId)
@@ -157,23 +206,38 @@ export default function NotesPanel({ docId }) {
           ]}
         />
       </Box>
-      <Box style={{ flex: 1, overflow: 'auto', paddingTop: 40 }}>
+      <Box style={{ flex: 1, overflow: 'auto', paddingTop: 40, display: 'flex', flexDirection: 'column' }}>
         {textMode === 'text' ? (
-          <BlockNoteView editor={editor} theme={colorScheme} onChange={handleChange} />
+          <Box style={{ paddingBottom: '400px' }}>
+            <BlockNoteView editor={editor} theme={colorScheme} onChange={handleChange} />
+          </Box>
         ) : (
           <Textarea
             value={markdownText}
             onChange={(e) => handleMarkdownChange(e.target.value)}
             placeholder="Write markdown here..."
             styles={{
-              root: { height: '100%' },
-              wrapper: { height: '100%' },
+              root: { 
+                height: '100%',
+                flex: 1,
+                display: 'flex',
+                flexDirection: 'column',
+              },
+              wrapper: { 
+                height: '100%',
+                flex: 1,
+                display: 'flex',
+                flexDirection: 'column',
+              },
               input: { 
-                height: '100%', 
+                height: '100%',
+                flex: 1,
                 fontFamily: 'monospace',
                 fontSize: 14,
                 border: 'none',
                 resize: 'none',
+                paddingBottom: '400px',
+                boxSizing: 'border-box',
               },
             }}
           />

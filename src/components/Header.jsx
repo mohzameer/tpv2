@@ -1,5 +1,5 @@
 import { Group, SegmentedControl, Box, ActionIcon, Loader, Text, TextInput, Menu } from '@mantine/core'
-import { IconSun, IconMoon, IconUser, IconCloud, IconSettings, IconLogout, IconLogin, IconFolder } from '@tabler/icons-react'
+import { IconSun, IconMoon, IconUser, IconCloud, IconSettings, IconLogout, IconLogin, IconFolder, IconSparkles } from '@tabler/icons-react'
 import { useTheme } from '../context/ThemeContext'
 import { useSync } from '../context/SyncContext'
 import { useProjectContext } from '../context/ProjectContext'
@@ -10,7 +10,7 @@ import { supabase } from '../lib/supabase'
 import LoginModal from './LoginModal'
 import ProjectsModal from './ProjectsModal'
 
-export default function Header({ sidebarOpen, onToggleSidebar, mode, onModeChange }) {
+export default function Header({ sidebarOpen, onToggleSidebar, chatBarOpen, onToggleChatBar, mode, onModeChange }) {
   const { colorScheme, toggleColorScheme } = useTheme()
   const { isSyncing } = useSync()
   const { project, refreshDocuments } = useProjectContext()
@@ -108,6 +108,13 @@ export default function Header({ sidebarOpen, onToggleSidebar, mode, onModeChang
           ) : (
             <IconCloud size={20} color={colorScheme === 'dark' ? '#22c55e' : '#16a34a'} />
           )}
+        </ActionIcon>
+        <ActionIcon 
+          variant="transparent"
+          onClick={onToggleChatBar} 
+          size="lg"
+        >
+          <IconSparkles size={20} color={colorScheme === 'dark' ? '#9ca3af' : '#6b7280'} />
         </ActionIcon>
         <ActionIcon 
           variant="transparent" 

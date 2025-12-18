@@ -10,6 +10,7 @@ export default function DrawingPanel({ docId }) {
   const [initialData, setInitialData] = useState(null)
   const saveTimeout = useRef(null)
   const excalidrawRef = useRef(null)
+  const excalidrawAPI = useRef(null)
   const lastSavedContent = useRef(null)
   const { colorScheme } = useTheme()
   const { setIsSyncing } = useSync()
@@ -18,6 +19,7 @@ export default function DrawingPanel({ docId }) {
     if (!docId) return
     loadContent()
   }, [docId])
+
 
   async function loadContent() {
     try {
@@ -72,6 +74,9 @@ export default function DrawingPanel({ docId }) {
     <div style={{ height: '100%', width: '100%', position: 'relative' }}>
       <Excalidraw
         ref={excalidrawRef}
+        excalidrawAPI={(api) => {
+          excalidrawAPI.current = api
+        }}
         initialData={initialData}
         zenModeEnabled={true}
         onChange={handleChange}
