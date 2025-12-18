@@ -1,11 +1,11 @@
-import { Stack, ActionIcon, Loader, Center, Box, Group, Text, TextInput } from '@mantine/core'
-import { IconFile, IconPlus, IconChevronLeft } from '@tabler/icons-react'
+import { Stack, ActionIcon, Loader, Center, Box, Group, Text, TextInput, Modal, Button } from '@mantine/core'
+import { IconFile, IconPlus, IconChevronLeft, IconTrash } from '@tabler/icons-react'
 import './Sidebar.css'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import { useProjectContext } from '../context/ProjectContext'
 import { setLastVisited } from '../lib/lastVisited'
-import { updateDocument } from '../lib/api'
+import { updateDocument, deleteDocument } from '../lib/api'
 
 function formatDate(dateString) {
   if (!dateString) return ''
@@ -27,6 +27,7 @@ export default function Sidebar({ onCollapse }) {
   const { project, documents, loading, addDocument, refreshDocuments } = useProjectContext()
   const [editingId, setEditingId] = useState(null)
   const [editingTitle, setEditingTitle] = useState('')
+  const [deleteConfirm, setDeleteConfirm] = useState(null)
 
   useEffect(() => {
     if (!loading && !docId && documents.length > 0 && project) {
@@ -71,6 +72,23 @@ export default function Sidebar({ onCollapse }) {
     }
   }
 
+  async function handleDelete() {
+    if (!deleteConfirm || documents.length <= 1) return
+    
+    const deletingCurrentDoc = String(docId) === String(deleteConfirm.id)
+    await deleteDocument(deleteConfirm.id)
+    await refreshDocuments()
+    setDeleteConfirm(null)
+    
+    if (deletingCurrentDoc && project) {
+      // Navigate to first available document
+      const remaining = documents.filter(d => d.id !== deleteConfirm.id)
+      if (remaining.length > 0) {
+        navigate(`/${project.id}/${remaining[0].id}`)
+      }
+    }
+  }
+
   if (loading) {
     return (
       <Center p="md">
@@ -97,9 +115,9 @@ export default function Sidebar({ onCollapse }) {
               className="sidebar-item"
               data-active={isActive}
             >
-              <Group gap="xs">
-                <IconFile size={16} color="var(--mantine-color-gray-6)" />
-                <div style={{ flex: 1 }}>
+              <Group gap="xs" wrap="nowrap">
+                <IconFile size={16} color="var(--mantine-color-gray-6)" style={{ flexShrink: 0 }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
                   {editingId === doc.id ? (
                     <TextInput
                       value={editingTitle}
@@ -113,8 +131,23 @@ export default function Sidebar({ onCollapse }) {
                     />
                   ) : (
                     <>
-                      <Text size="sm" fw={isActive ? 500 : 400}>{doc.title}</Text>
-                      <Text size="xs" c="dimmed">{formatDate(doc.updated_at)}</Text>
+                      <Text size="sm" fw={isActive ? 500 : 400} truncate>{doc.title}</Text>
+                      <Group gap={4} wrap="nowrap" justify="space-between">
+                        <Text size="xs" c="dimmed">{formatDate(doc.updated_at)}</Text>
+                        {isActive && documents.length > 1 && (
+                          <ActionIcon
+                            variant="transparent"
+                            size="xs"
+                            color="gray"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setDeleteConfirm(doc)
+                            }}
+                          >
+                            <IconTrash size={12} />
+                          </ActionIcon>
+                        )}
+                      </Group>
                     </>
                   )}
                 </div>
@@ -141,6 +174,14 @@ export default function Sidebar({ onCollapse }) {
           <IconPlus size={16} />
         </ActionIcon>
       </Group>
+
+      <Modal opened={!!deleteConfirm} onClose={() => setDeleteConfirm(null)} title="Delete Document" centered size="sm">
+        <Text size="sm" mb="lg">Are you sure you want to delete "{deleteConfirm?.title}"?</Text>
+        <Group justify="flex-end">
+          <Button variant="subtle" onClick={() => setDeleteConfirm(null)}>Cancel</Button>
+          <Button color="red" onClick={handleDelete}>Delete</Button>
+        </Group>
+      </Modal>
     </Stack>
   )
 }
