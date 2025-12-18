@@ -15,6 +15,7 @@ export default function SettingsPage() {
 
   function validatePassword(pwd) {
     if (pwd.length < 8) return 'Password must be at least 8 characters'
+    if (pwd.length > 128) return 'Password must be at most 128 characters'
     if (!/[A-Z]/.test(pwd)) return 'Password must contain an uppercase letter'
     if (!/[a-z]/.test(pwd)) return 'Password must contain a lowercase letter'
     if (!/[0-9]/.test(pwd)) return 'Password must contain a number'
@@ -79,13 +80,23 @@ export default function SettingsPage() {
                 label="New Password"
                 placeholder="Enter new password"
                 value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
+                onChange={(e) => {
+                  if (e.target.value.length <= 128) {
+                    setNewPassword(e.target.value)
+                  }
+                }}
+                maxLength={128}
               />
               <PasswordInput
                 label="Confirm Password"
                 placeholder="Confirm new password"
                 value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
+                onChange={(e) => {
+                  if (e.target.value.length <= 128) {
+                    setConfirmPassword(e.target.value)
+                  }
+                }}
+                maxLength={128}
               />
               <Button type="submit" loading={loading} disabled={!newPassword}>
                 Update Password

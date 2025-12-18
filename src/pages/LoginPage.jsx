@@ -56,15 +56,26 @@ export default function LoginPage() {
               label="Email"
               placeholder="you@example.com"
               required
+              type="email"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => {
+                if (e.target.value.length <= 254) {
+                  setEmail(e.target.value)
+                }
+              }}
+              maxLength={254}
             />
             <PasswordInput
               label="Password"
               placeholder="Your password"
               required
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={(e) => {
+                if (e.target.value.length <= 128) {
+                  setPassword(e.target.value)
+                }
+              }}
+              maxLength={128}
             />
             <Button type="submit" fullWidth loading={loading}>
               {isSignUp ? 'Sign up' : 'Sign in'}

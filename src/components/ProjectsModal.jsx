@@ -125,11 +125,16 @@ export default function ProjectsModal({ opened, onClose }) {
                 placeholder="Project name"
                 size="xs"
                 value={newName}
-                onChange={(e) => setNewName(e.target.value)}
+                onChange={(e) => {
+                  if (e.target.value.length <= 100) {
+                    setNewName(e.target.value)
+                  }
+                }}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') handleAddProject()
                   else if (e.key === 'Escape') setAdding(false)
                 }}
+                maxLength={100}
                 autoFocus
                 style={{ flex: 1 }}
               />

@@ -13,6 +13,7 @@ export default function LoginModal({ opened, onClose }) {
 
   function validatePassword(pwd) {
     if (pwd.length < 8) return 'Password must be at least 8 characters'
+    if (pwd.length > 128) return 'Password must be at most 128 characters'
     if (!/[A-Z]/.test(pwd)) return 'Password must contain an uppercase letter'
     if (!/[a-z]/.test(pwd)) return 'Password must contain a lowercase letter'
     if (!/[0-9]/.test(pwd)) return 'Password must contain a number'
@@ -70,15 +71,26 @@ export default function LoginModal({ opened, onClose }) {
             label="Email"
             placeholder="you@example.com"
             required
+            type="email"
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            onChange={(e) => {
+              if (e.target.value.length <= 254) {
+                setEmail(e.target.value)
+              }
+            }}
+            maxLength={254}
           />
           <PasswordInput
             label="Password"
             placeholder="Your password"
             required
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            onChange={(e) => {
+              if (e.target.value.length <= 128) {
+                setPassword(e.target.value)
+              }
+            }}
+            maxLength={128}
           />
           <Button type="submit" fullWidth loading={loading}>
             {isSignUp ? 'Sign up' : 'Sign in'}

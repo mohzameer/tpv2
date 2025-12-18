@@ -59,10 +59,15 @@ export default function Header({ sidebarOpen, onToggleSidebar, mode, onModeChang
             {editing ? (
               <TextInput
                 value={projectName}
-                onChange={(e) => setProjectName(e.target.value)}
+                onChange={(e) => {
+                  if (e.target.value.length <= 100) {
+                    setProjectName(e.target.value)
+                  }
+                }}
                 onBlur={handleSave}
                 onKeyDown={handleKeyDown}
                 size="xs"
+                maxLength={100}
                 autoFocus
                 styles={{ input: { fontWeight: 500 } }}
               />

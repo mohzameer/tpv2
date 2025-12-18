@@ -127,10 +127,15 @@ export default function Sidebar({ onCollapse }) {
                   {editingId === doc.id ? (
                     <TextInput
                       value={editingTitle}
-                      onChange={(e) => setEditingTitle(e.target.value)}
+                      onChange={(e) => {
+                        if (e.target.value.length <= 100) {
+                          setEditingTitle(e.target.value)
+                        }
+                      }}
                       onBlur={handleRename}
                       onKeyDown={handleKeyDown}
                       size="xs"
+                      maxLength={100}
                       autoFocus
                       onClick={(e) => e.stopPropagation()}
                       onDoubleClick={(e) => e.stopPropagation()}
