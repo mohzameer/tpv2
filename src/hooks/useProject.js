@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { getProjects, createProject, getDocuments, createDocument, deleteProject } from '../lib/api'
-import { getLastVisited } from '../lib/lastVisited'
+import { getLastVisited, setLastVisited, getLastDocumentForProject } from '../lib/lastVisited'
 
 export function useProject() {
   const [project, setProject] = useState(null)
@@ -43,7 +43,17 @@ export function useProject() {
         projects = [newProject]
       }
 
-      const currentProject = projects[0]
+      // Check for last visited project
+      const lastVisited = getLastVisited()
+      let currentProject = projects[0]
+      
+      if (lastVisited?.projectId) {
+        const lastProject = projects.find(p => p.id === lastVisited.projectId)
+        if (lastProject) {
+          currentProject = lastProject
+        }
+      }
+
       setProject(currentProject)
 
       // Load documents
@@ -81,7 +91,10 @@ export function useProject() {
     try {
       const projects = await getProjects()
       const targetProject = projects.find(p => p.id === projectId)
-      if (!targetProject) return
+      if (!targetProject) {
+        setLoading(false)
+        return null
+      }
       
       setProject(targetProject)
       
@@ -91,8 +104,29 @@ export function useProject() {
         docs = [newDoc]
       }
       setDocuments(docs)
+      
+      // Get the last visited document for this project
+      const lastDocId = getLastDocumentForProject(projectId)
+      let targetDocId = docs[0].id
+      
+      // If we have a last document for this project and it still exists, use it
+      // Compare as strings to handle type mismatches
+      if (lastDocId) {
+        const lastDocIdStr = String(lastDocId)
+        const lastDoc = docs.find(d => String(d.id) === lastDocIdStr)
+        if (lastDoc) {
+          targetDocId = lastDoc.id
+        }
+      }
+      
+      // Persist the project selection with the target document
+      setLastVisited(targetProject.id, targetDocId)
+      
+      return targetDocId
     } catch (err) {
       console.error('Failed to switch project:', err)
+      setLoading(false)
+      return null
     } finally {
       setLoading(false)
     }

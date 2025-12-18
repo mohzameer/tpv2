@@ -4,7 +4,7 @@ import './Sidebar.css'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import { useProjectContext } from '../context/ProjectContext'
-import { setLastVisited } from '../lib/lastVisited'
+import { setLastVisited, getLastDocumentForProject } from '../lib/lastVisited'
 import { updateDocument, deleteDocument } from '../lib/api'
 
 function formatDate(dateString) {
@@ -31,7 +31,13 @@ export default function Sidebar({ onCollapse }) {
 
   useEffect(() => {
     if (!loading && !docId && documents.length > 0 && project) {
-      navigate(`/${project.id}/${documents[0].id}`, { replace: true })
+      // Check for last visited document for this project
+      // Compare as strings to handle type mismatches
+      const lastDocId = getLastDocumentForProject(project.id)
+      const lastDocIdStr = lastDocId ? String(lastDocId) : null
+      const foundDoc = lastDocIdStr ? documents.find(d => String(d.id) === lastDocIdStr) : null
+      const docToUse = foundDoc ? foundDoc.id : documents[0].id
+      navigate(`/${project.id}/${docToUse}`, { replace: true })
     }
   }, [docId, documents, loading, project, navigate])
 
