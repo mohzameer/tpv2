@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import { getGuestId } from './guest'
+import { getGuestId, hasEverLoggedIn } from './guest'
 
 function generateProjectId() {
   const chars = 'abcdefghijklmnopqrstuvwxyz0123456789'
@@ -10,23 +10,113 @@ function generateProjectId() {
   return result
 }
 
+// Migrate guest projects to owner when user logs in
+export async function migrateGuestProjectsToOwner(userId) {
+  try {
+    console.log('[api] migrateGuestProjectsToOwner - Starting for userId:', userId)
+    const guestId = localStorage.getItem('thinkpost_guest_id')
+    console.log('[api] migrateGuestProjectsToOwner - guestId:', guestId)
+    if (!guestId) {
+      console.log('[api] migrateGuestProjectsToOwner - No guest ID found, skipping migration')
+      return
+    }
+    
+    // Update all projects with this guest_id to have owner_id instead
+    console.log('[api] migrateGuestProjectsToOwner - Updating projects...')
+    const { data, error } = await supabase
+      .from('projects')
+      .update({ owner_id: userId, guest_id: null })
+      .eq('guest_id', guestId)
+      .is('owner_id', null)
+      .select()
+    
+    if (error) {
+      console.error('[api] migrateGuestProjectsToOwner - Error:', error)
+      throw error
+    }
+    console.log('[api] migrateGuestProjectsToOwner - Migrated projects:', data?.length || 0, data)
+  } catch (err) {
+    console.error('[api] migrateGuestProjectsToOwner - Failed:', err)
+    throw err
+  }
+}
+
 // Projects
-export async function getProjects() {
-  const guestId = getGuestId()
-  const { data, error } = await supabase
+export async function getProjects(userId = null) {
+  console.log('[api] getProjects - Starting... userId param:', userId)
+  // Get current user session if not provided
+  if (userId === null) {
+    const { data: { session } } = await supabase.auth.getSession()
+    userId = session?.user?.id
+  }
+  console.log('[api] getProjects - userId:', userId)
+  
+  // If user has ever logged in, they must be logged in now
+  const hasLoggedIn = hasEverLoggedIn()
+  console.log('[api] getProjects - hasEverLoggedIn:', hasLoggedIn)
+  if (hasLoggedIn && !userId) {
+    console.error('[api] getProjects - User has logged in before but is not logged in now')
+    throw new Error('You must be logged in to access projects.')
+  }
+  
+  let query = supabase
     .from('projects')
     .select('*')
-    .eq('guest_id', guestId)
-    .order('created_at', { ascending: false })
-  if (error) throw error
-  return data
+  
+  // If authenticated, only get projects owned by user (no guest_id projects)
+  // If not authenticated (and never logged in), get guest projects
+  if (userId) {
+    console.log('[api] getProjects - Querying projects with owner_id:', userId)
+    query = query.eq('owner_id', userId)
+  } else {
+    // Only allow guest access if user has never logged in
+    try {
+      const guestId = getGuestId()
+      console.log('[api] getProjects - Querying projects with guest_id:', guestId)
+      query = query.eq('guest_id', guestId)
+    } catch (err) {
+      // getGuestId throws if user has logged in before
+      console.error('[api] getProjects - getGuestId failed:', err)
+      throw new Error('You must be logged in to access projects.')
+    }
+  }
+  
+  const { data, error } = await query.order('created_at', { ascending: false })
+  if (error) {
+    console.error('[api] getProjects - Query error:', error)
+    throw error
+  }
+  console.log('[api] getProjects - Found projects:', data?.length || 0, data)
+  return data || []
 }
 
 export async function createProject(name) {
-  const guestId = getGuestId()
+  // Get current user session
+  const { data: { session } = {} } = await supabase.auth.getSession()
+  const userId = session?.user?.id
+  
+  const projectData = {
+    id: generateProjectId(),
+    name,
+    type: 'native'
+  }
+  
+  // If authenticated, set owner_id; otherwise set guest_id (only if never logged in)
+  if (userId) {
+    projectData.owner_id = userId
+  } else {
+    // Only allow guest projects if user has never logged in
+    try {
+      const guestId = getGuestId()
+      projectData.guest_id = guestId
+    } catch (err) {
+      throw new Error('You must be logged in to create projects.')
+    }
+  }
+  
   const { data, error } = await supabase
     .from('projects')
-    .insert({ id: generateProjectId(), name, guest_id: guestId, type: 'native' })
+    .insert(projectData)
     .select()
     .single()
   if (error) throw error
@@ -39,14 +129,65 @@ export async function deleteProject(id) {
 }
 
 // Documents
-export async function getDocuments(projectId) {
+export async function getDocuments(projectId, userId = null) {
+  console.log('[api] getDocuments - Starting for projectId:', projectId, 'userId param:', userId)
+  // First verify the user has access to this project
+  if (userId === null) {
+    const { data: { session } } = await supabase.auth.getSession()
+    userId = session?.user?.id
+  }
+  console.log('[api] getDocuments - userId:', userId)
+  
+  // If user has ever logged in, they must be logged in now
+  const hasLoggedIn = hasEverLoggedIn()
+  console.log('[api] getDocuments - hasEverLoggedIn:', hasLoggedIn)
+  if (hasLoggedIn && !userId) {
+    console.error('[api] getDocuments - User has logged in before but is not logged in now')
+    throw new Error('You must be logged in to access documents.')
+  }
+  
+  // Check if project exists and user has access
+  let projectQuery = supabase
+    .from('projects')
+    .select('id')
+    .eq('id', projectId)
+  
+  if (userId) {
+    // Authenticated: only projects with owner_id matching user
+    console.log('[api] getDocuments - Verifying project access with owner_id:', userId)
+    projectQuery = projectQuery.eq('owner_id', userId)
+  } else {
+    // Guest: only if never logged in
+    try {
+      const guestId = getGuestId()
+      console.log('[api] getDocuments - Verifying project access with guest_id:', guestId)
+      projectQuery = projectQuery.eq('guest_id', guestId)
+    } catch (err) {
+      console.error('[api] getDocuments - getGuestId failed:', err)
+      throw new Error('You must be logged in to access documents.')
+    }
+  }
+  
+  const { data: project, error: projectError } = await projectQuery.single()
+  
+  if (projectError || !project) {
+    console.error('[api] getDocuments - Project access denied or not found:', projectError, project)
+    throw new Error('Project not found or access denied')
+  }
+  console.log('[api] getDocuments - Project access verified:', project)
+  
+  // Get documents for the project
   const { data, error } = await supabase
     .from('documents')
     .select('*')
     .eq('project_id', projectId)
     .order('sort_order', { ascending: true })
-  if (error) throw error
-  return data
+  if (error) {
+    console.error('[api] getDocuments - Query error:', error)
+    throw error
+  }
+  console.log('[api] getDocuments - Found documents:', data?.length || 0, data)
+  return data || []
 }
 
 export async function createDocument(projectId, title) {
