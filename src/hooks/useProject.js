@@ -1,15 +1,46 @@
-import { useState, useEffect } from 'react'
-import { getProjects, createProject, getDocuments, createDocument, deleteProject } from '../lib/api'
+import { useState, useEffect, useRef } from 'react'
+import { getProjects, createProject, getDocuments, createDocument, deleteProject, getUserRole, getProjectMembers } from '../lib/api'
 import { getLastVisited, setLastVisited, getLastDocumentForProject } from '../lib/lastVisited'
+import { useAuth } from '../context/AuthContext'
 
 export function useProject() {
   const [project, setProject] = useState(null)
   const [documents, setDocuments] = useState([])
   const [loading, setLoading] = useState(true)
+  const [userRole, setUserRole] = useState(null)
+  const [members, setMembers] = useState([])
+  const [membersLoading, setMembersLoading] = useState(false)
+  const { user } = useAuth()
 
+  const prevUserRef = useRef(undefined)
+  const isInitializedRef = useRef(false)
+  
+  // Initialize on mount and when auth state changes
   useEffect(() => {
-    initProject()
-  }, [])
+    const prevUser = prevUserRef.current
+    prevUserRef.current = user
+    
+    // First mount - initialize
+    if (!isInitializedRef.current) {
+      isInitializedRef.current = true
+      initProject()
+      return
+    }
+    
+    // Only re-init if user state actually changed (logged in or out)
+    // Wait a bit after signout to ensure localStorage is cleared and ready
+    if (prevUser !== undefined && prevUser !== user) {
+      if (user === null) {
+        // User signed out - wait a moment for localStorage to be cleared, then re-init
+        setTimeout(() => {
+          initProject()
+        }, 100)
+      } else {
+        // User signed in - re-init immediately
+        initProject()
+      }
+    }
+  }, [user])
 
   async function resetProject() {
     setLoading(true)
@@ -35,6 +66,10 @@ export function useProject() {
   async function initProject() {
     setLoading(true)
     try {
+      // Ensure guest_id exists (getGuestId creates it if missing)
+      const { getGuestId } = await import('../lib/guest')
+      getGuestId()
+      
       let projects = await getProjects()
       
       // Create default project if none exists
@@ -56,6 +91,9 @@ export function useProject() {
 
       setProject(currentProject)
 
+      // Load user role and members
+      await loadCollaborationData(currentProject.id)
+
       // Load documents
       let docs = await getDocuments(currentProject.id)
       
@@ -66,8 +104,27 @@ export function useProject() {
       }
 
       setDocuments(docs)
+      
+      // Save last visited document for this project
+      const lastDocId = getLastDocumentForProject(currentProject.id)
+      let docToSave = docs[0]?.id
+      
+      // Use last visited doc if it exists, otherwise use first doc
+      if (lastDocId) {
+        const lastDocIdStr = String(lastDocId)
+        const foundDoc = docs.find(d => String(d.id) === lastDocIdStr)
+        if (foundDoc) {
+          docToSave = foundDoc.id
+        }
+      }
+      
+      // Save to localStorage
+      if (docToSave) {
+        setLastVisited(currentProject.id, docToSave)
+      }
     } catch (err) {
       console.error('Failed to init project:', err)
+      // Don't throw - just log the error so signout can complete
     } finally {
       setLoading(false)
     }
@@ -97,6 +154,9 @@ export function useProject() {
       }
       
       setProject(targetProject)
+      
+      // Load user role and members for new project
+      await loadCollaborationData(targetProject.id)
       
       let docs = await getDocuments(targetProject.id)
       if (docs.length === 0) {
@@ -132,5 +192,44 @@ export function useProject() {
     }
   }
 
-  return { project, documents, loading, addDocument, refreshDocuments, resetProject, switchProject }
+  async function loadCollaborationData(projectId) {
+    if (!projectId) return
+    
+    setMembersLoading(true)
+    try {
+      // Load user role and members in parallel
+      const [role, projectMembers] = await Promise.all([
+        getUserRole(projectId).catch(() => null), // Return null if not a member
+        getProjectMembers(projectId).catch(() => []) // Return empty array on error
+      ])
+      
+      setUserRole(role)
+      setMembers(projectMembers || [])
+    } catch (err) {
+      console.error('Failed to load collaboration data:', err)
+      setUserRole(null)
+      setMembers([])
+    } finally {
+      setMembersLoading(false)
+    }
+  }
+
+  async function refreshMembers() {
+    if (!project) return
+    await loadCollaborationData(project.id)
+  }
+
+  return { 
+    project, 
+    documents, 
+    loading, 
+    addDocument, 
+    refreshDocuments, 
+    resetProject, 
+    switchProject,
+    userRole,
+    members,
+    membersLoading,
+    refreshMembers
+  }
 }

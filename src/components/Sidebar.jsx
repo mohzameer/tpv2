@@ -1,11 +1,12 @@
-import { Stack, ActionIcon, Loader, Center, Box, Group, Text, TextInput, Modal, Button } from '@mantine/core'
-import { IconFile, IconPlus, IconChevronLeft, IconTrash } from '@tabler/icons-react'
+import { Stack, ActionIcon, Loader, Center, Box, Group, Text, TextInput, Modal, Button, Badge } from '@mantine/core'
+import { IconFile, IconPlus, IconChevronLeft, IconTrash, IconLock } from '@tabler/icons-react'
 import './Sidebar.css'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import { useProjectContext } from '../context/ProjectContext'
 import { setLastVisited, getLastDocumentForProject } from '../lib/lastVisited'
 import { updateDocument, deleteDocument } from '../lib/api'
+import { canCreateDocuments, canDeleteDocument, canViewDocument } from '../lib/permissions'
 
 function formatDate(dateString) {
   if (!dateString) return ''
@@ -24,22 +25,30 @@ function formatDate(dateString) {
 export default function Sidebar({ onCollapse }) {
   const navigate = useNavigate()
   const { docId } = useParams()
-  const { project, documents, loading, addDocument, refreshDocuments } = useProjectContext()
+  const { project, documents, loading, addDocument, refreshDocuments, userRole } = useProjectContext()
   const [editingId, setEditingId] = useState(null)
   const [editingTitle, setEditingTitle] = useState('')
   const [deleteConfirm, setDeleteConfirm] = useState(null)
+  
+  // Filter documents based on role and is_open
+  const visibleDocuments = documents?.filter(doc => 
+    canViewDocument(userRole, doc.is_open !== false)
+  ) || []
+  
+  const totalDocuments = documents?.length || 0
+  const hiddenCount = totalDocuments - visibleDocuments.length
 
   useEffect(() => {
-    if (!loading && !docId && documents.length > 0 && project) {
+    if (!loading && !docId && visibleDocuments.length > 0 && project) {
       // Check for last visited document for this project
       // Compare as strings to handle type mismatches
       const lastDocId = getLastDocumentForProject(project.id)
       const lastDocIdStr = lastDocId ? String(lastDocId) : null
-      const foundDoc = lastDocIdStr ? documents.find(d => String(d.id) === lastDocIdStr) : null
-      const docToUse = foundDoc ? foundDoc.id : documents[0].id
-      navigate(`/${project.id}/${docToUse}`, { replace: true })
+      const foundDoc = lastDocIdStr ? visibleDocuments.find(d => String(d.id) === lastDocIdStr) : null
+      const docToUse = foundDoc ? foundDoc.id : visibleDocuments[0].id
+      navigate(`/app/${project.id}/${docToUse}`, { replace: true })
     }
-  }, [docId, documents, loading, project, navigate])
+  }, [docId, visibleDocuments, loading, project, navigate])
 
   // Save last visited whenever docId changes
   useEffect(() => {
@@ -51,7 +60,7 @@ export default function Sidebar({ onCollapse }) {
   async function handleAddDocument() {
     const doc = await addDocument()
     if (doc && project) {
-      navigate(`/${project.id}/${doc.id}`)
+      navigate(`/app/${project.id}/${doc.id}`)
     }
   }
 
@@ -90,7 +99,7 @@ export default function Sidebar({ onCollapse }) {
       // Navigate to first available document
       const remaining = documents.filter(d => d.id !== deleteConfirm.id)
       if (remaining.length > 0) {
-        navigate(`/${project.id}/${remaining[0].id}`)
+        navigate(`/app/${project.id}/${remaining[0].id}`)
       }
     }
   }
@@ -103,26 +112,36 @@ export default function Sidebar({ onCollapse }) {
     )
   }
 
-  const sortedDocuments = [...documents].sort((a, b) => 
+  const sortedDocuments = [...visibleDocuments].sort((a, b) => 
     new Date(b.updated_at) - new Date(a.updated_at)
   )
 
   return (
     <Stack p="sm" gap="xs" style={{ height: '100%' }}>
+      {hiddenCount > 0 && (
+        <Text size="xs" c="dimmed" ta="center" p="xs">
+          Showing {visibleDocuments.length} of {totalDocuments} documents
+        </Text>
+      )}
       <Stack gap="xs" style={{ flex: 1 }}>
         {sortedDocuments.map((doc) => {
           const isActive = docId !== undefined && String(docId) === String(doc.id)
+          const isClosed = doc.is_open === false
           return (
             <Box
               key={doc.id}
-              onClick={() => navigate(`/${project.id}/${doc.id}`)}
+              onClick={() => navigate(`/app/${project.id}/${doc.id}`)}
               onDoubleClick={() => handleDoubleClick(doc)}
               p="xs"
               className="sidebar-item"
               data-active={isActive}
             >
               <Group gap="xs" wrap="nowrap">
-                <IconFile size={16} color="var(--mantine-color-gray-6)" style={{ flexShrink: 0 }} />
+                {isClosed ? (
+                  <IconLock size={16} color="var(--mantine-color-gray-6)" style={{ flexShrink: 0 }} />
+                ) : (
+                  <IconFile size={16} color="var(--mantine-color-gray-6)" style={{ flexShrink: 0 }} />
+                )}
                 <div style={{ flex: 1, minWidth: 0 }}>
                   {editingId === doc.id ? (
                     <TextInput
@@ -142,10 +161,19 @@ export default function Sidebar({ onCollapse }) {
                     />
                   ) : (
                     <>
-                      <Text size="sm" fw={isActive ? 500 : 400} truncate>{doc.title}</Text>
+                      <Group gap="xs" wrap="nowrap">
+                        <Text size="sm" fw={isActive ? 500 : 400} truncate style={{ flex: 1 }}>
+                          {doc.title}
+                        </Text>
+                        {isClosed && (
+                          <Badge size="xs" color="gray" variant="light">
+                            Closed
+                          </Badge>
+                        )}
+                      </Group>
                       <Group gap={4} wrap="nowrap" justify="space-between">
                         <Text size="xs" c="dimmed">{formatDate(doc.updated_at)}</Text>
-                        {isActive && documents.length > 1 && (
+                        {isActive && visibleDocuments.length > 1 && canDeleteDocument(userRole) && (
                           <ActionIcon
                             variant="transparent"
                             size="xs"
@@ -176,14 +204,17 @@ export default function Sidebar({ onCollapse }) {
         >
           <IconChevronLeft size={16} />
         </ActionIcon>
-        <ActionIcon 
-          variant="subtle" 
-          color="gray" 
-          size="md" 
-          onClick={handleAddDocument}
-        >
-          <IconPlus size={16} />
-        </ActionIcon>
+        {canCreateDocuments(userRole) && (
+          <ActionIcon 
+            variant="subtle" 
+            color="gray" 
+            size="md" 
+            onClick={handleAddDocument}
+            title="Create new document"
+          >
+            <IconPlus size={16} />
+          </ActionIcon>
+        )}
       </Group>
 
       <Modal opened={!!deleteConfirm} onClose={() => setDeleteConfirm(null)} title="Delete Document" centered size="sm">

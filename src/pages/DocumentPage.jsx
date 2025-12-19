@@ -2,14 +2,23 @@ import { useParams, useOutletContext } from 'react-router-dom'
 import WorkspacePanel from '../components/WorkspacePanel'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { getDocumentContent, updateDocumentContent } from '../lib/api'
+import { useProjectContext } from '../context/ProjectContext'
+import ReadOnlyBanner from '../components/ReadOnlyBanner'
+import { Stack } from '@mantine/core'
+import { canEditDocument } from '../lib/permissions'
+import { setLastVisited } from '../lib/lastVisited'
 
 export default function DocumentPage() {
   const { projectId, docId } = useParams()
   const { mode, setMode } = useOutletContext()
+  const { userRole, membersLoading } = useProjectContext()
   const [layoutRatio, setLayoutRatio] = useState(50)
   const [loaded, setLoaded] = useState(false)
   const saveTimeout = useRef(null)
   const docIdRef = useRef(docId)
+  // Only show read-only banner if we have a confirmed role and user can't edit
+  // Don't show while loading (userRole is null/undefined)
+  const isReadOnly = userRole !== null && userRole !== undefined && !canEditDocument(userRole)
 
   // Keep docIdRef in sync
   useEffect(() => {
@@ -17,14 +26,16 @@ export default function DocumentPage() {
   }, [docId])
 
   useEffect(() => {
-    if (!docId) return
+    if (!docId || !projectId) return
     // Clear any pending saves from previous doc
     if (saveTimeout.current) {
       clearTimeout(saveTimeout.current)
       saveTimeout.current = null
     }
+    // Save as last visited document
+    setLastVisited(projectId, docId)
     loadLayout()
-  }, [docId])
+  }, [docId, projectId])
 
   const handleModeChangeFromHeader = useCallback((newMode) => {
     setMode(newMode)
@@ -84,16 +95,25 @@ export default function DocumentPage() {
     }
   }
 
-  if (!loaded) return null
+  if (!loaded || membersLoading) return null
 
   return (
-    <WorkspacePanel 
-      mode={mode} 
-      onModeChange={handleModeChange}
-      layoutRatio={layoutRatio}
-      onRatioChange={handleRatioChange}
-      projectId={projectId} 
-      docId={docId} 
-    />
+    <Stack gap={0} style={{ height: '100%' }}>
+      {isReadOnly && (
+        <div style={{ padding: '0 1rem', paddingTop: '1rem' }}>
+          <ReadOnlyBanner />
+        </div>
+      )}
+      <div style={{ flex: 1, overflow: 'hidden' }}>
+        <WorkspacePanel 
+          mode={mode} 
+          onModeChange={handleModeChange}
+          layoutRatio={layoutRatio}
+          onRatioChange={handleRatioChange}
+          projectId={projectId} 
+          docId={docId} 
+        />
+      </div>
+    </Stack>
   )
 }

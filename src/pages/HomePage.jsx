@@ -14,9 +14,9 @@ export default function HomePage() {
     const lastVisited = getLastVisited()
     
     if (lastVisited?.projectId && lastVisited?.docId) {
-      navigate(`/${lastVisited.projectId}/${lastVisited.docId}`, { replace: true })
+      navigate(`/app/${lastVisited.projectId}/${lastVisited.docId}`, { replace: true })
     } else if (project && documents.length > 0) {
-      navigate(`/${project.id}/${documents[0].id}`, { replace: true })
+      navigate(`/app/${project.id}/${documents[0].id}`, { replace: true })
     }
   }, [loading, project, documents, navigate])
 

@@ -23,12 +23,15 @@ export default function LoginModal({ opened, onClose }) {
 
   async function handleSubmit(e) {
     e.preventDefault()
+    console.log('[LOGIN MODAL] Form submitted', { isSignUp, email: email.substring(0, 5) + '...', hasPassword: !!password })
+    
     setError('')
     setMessage('')
     
     if (isSignUp) {
       const pwdError = validatePassword(password)
       if (pwdError) {
+        console.log('[LOGIN MODAL] Password validation failed:', pwdError)
         setError(pwdError)
         return
       }
@@ -38,16 +41,27 @@ export default function LoginModal({ opened, onClose }) {
 
     try {
       if (isSignUp) {
+        console.log('[LOGIN MODAL] Attempting sign up...')
         await signUp(email, password)
+        console.log('[LOGIN MODAL] Sign up successful')
         setMessage('Check your email to confirm your account')
       } else {
-        await signIn(email, password)
+        console.log('[LOGIN MODAL] Attempting sign in...')
+        const result = await signIn(email, password)
+        console.log('[LOGIN MODAL] Sign in successful, closing modal')
         onClose()
       }
     } catch (err) {
-      setError(err.message)
+      console.error('[LOGIN MODAL] Error during login/signup:', err)
+      console.error('[LOGIN MODAL] Error details:', {
+        message: err.message,
+        status: err.status,
+        name: err.name
+      })
+      setError(err.message || 'An error occurred')
     } finally {
       setLoading(false)
+      console.log('[LOGIN MODAL] Form submission complete')
     }
   }
 

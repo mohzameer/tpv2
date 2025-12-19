@@ -1,17 +1,62 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Container, Paper, TextInput, PasswordInput, Button, Title, Stack, Alert, Group, Divider } from '@mantine/core'
 import { useAuth } from '../context/AuthContext'
+import { getUserProfile, updateUserProfile } from '../lib/api'
 
 export default function SettingsPage() {
   const { user, updateProfile, signOut } = useAuth()
   const navigate = useNavigate()
   
+  const [displayName, setDisplayName] = useState('')
+  const [profileLoading, setProfileLoading] = useState(true)
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-  const [message, setMessage] = useState('')
+  const [profileError, setProfileError] = useState('')
+  const [profileMessage, setProfileMessage] = useState('')
+  const [passwordError, setPasswordError] = useState('')
+  const [passwordMessage, setPasswordMessage] = useState('')
+
+  // Load user profile on mount
+  useEffect(() => {
+    loadUserProfile()
+  }, [user])
+
+  async function loadUserProfile() {
+    if (!user) return
+    setProfileLoading(true)
+    try {
+      const profile = await getUserProfile()
+      setDisplayName(profile?.display_name || user.email || '')
+    } catch (err) {
+      console.error('Failed to load profile:', err)
+      setDisplayName(user.email || '')
+    } finally {
+      setProfileLoading(false)
+    }
+  }
+
+  async function handleUpdateDisplayName(e) {
+    e.preventDefault()
+    if (!displayName.trim()) {
+      setProfileError('Display name cannot be empty')
+      return
+    }
+
+    setProfileError('')
+    setProfileMessage('')
+    setLoading(true)
+
+    try {
+      await updateUserProfile({ display_name: displayName.trim() })
+      setProfileMessage('Display name updated successfully')
+    } catch (err) {
+      setProfileError(err.message || 'Failed to update display name')
+    } finally {
+      setLoading(false)
+    }
+  }
 
   function validatePassword(pwd) {
     if (pwd.length < 8) return 'Password must be at least 8 characters'
@@ -26,35 +71,46 @@ export default function SettingsPage() {
   async function handleUpdatePassword(e) {
     e.preventDefault()
     if (newPassword !== confirmPassword) {
-      setError('Passwords do not match')
+      setPasswordError('Passwords do not match')
       return
     }
     
     const pwdError = validatePassword(newPassword)
     if (pwdError) {
-      setError(pwdError)
+      setPasswordError(pwdError)
       return
     }
     
-    setError('')
-    setMessage('')
+    setPasswordError('')
+    setPasswordMessage('')
     setLoading(true)
 
     try {
       await updateProfile({ password: newPassword })
-      setMessage('Password updated successfully')
+      setPasswordMessage('Password updated successfully')
       setNewPassword('')
       setConfirmPassword('')
     } catch (err) {
-      setError(err.message)
+      setPasswordError(err.message)
     } finally {
       setLoading(false)
     }
   }
 
   async function handleSignOut() {
-    await signOut()
-    navigate('/login')
+    console.log('[SETTINGS] Sign out button clicked')
+    try {
+      console.log('[SETTINGS] Calling signOut()...')
+      await signOut()
+      console.log('[SETTINGS] Sign out successful, navigating to /login')
+      // Navigate to login page after successful signout
+      navigate('/login', { replace: true })
+    } catch (err) {
+      console.error('[SETTINGS] Sign out failed:', err)
+      // Still navigate even if there's an error
+      console.log('[SETTINGS] Navigating to /login despite error')
+      navigate('/login', { replace: true })
+    }
   }
 
   return (
@@ -69,12 +125,38 @@ export default function SettingsPage() {
             disabled
           />
 
+          <Divider my="sm" label="Profile" labelPosition="center" />
+
+          <form onSubmit={handleUpdateDisplayName}>
+            <Stack>
+              {profileError && <Alert color="red">{profileError}</Alert>}
+              {profileMessage && <Alert color="green">{profileMessage}</Alert>}
+              
+              <TextInput
+                label="Display Name"
+                placeholder="Your display name"
+                value={displayName}
+                onChange={(e) => {
+                  if (e.target.value.length <= 100) {
+                    setDisplayName(e.target.value)
+                  }
+                }}
+                maxLength={100}
+                disabled={profileLoading}
+                description="This name will be shown to other users in shared projects"
+              />
+              <Button type="submit" loading={loading} disabled={!displayName.trim() || profileLoading}>
+                Update Display Name
+              </Button>
+            </Stack>
+          </form>
+
           <Divider my="sm" label="Change Password" labelPosition="center" />
 
           <form onSubmit={handleUpdatePassword}>
             <Stack>
-              {error && <Alert color="red">{error}</Alert>}
-              {message && <Alert color="green">{message}</Alert>}
+              {passwordError && <Alert color="red">{passwordError}</Alert>}
+              {passwordMessage && <Alert color="green">{passwordMessage}</Alert>}
               
               <PasswordInput
                 label="New Password"
@@ -107,7 +189,7 @@ export default function SettingsPage() {
           <Divider my="sm" />
 
           <Group justify="space-between">
-            <Button variant="subtle" onClick={() => navigate('/')}>
+            <Button variant="subtle" onClick={() => navigate('/app')}>
               Back to App
             </Button>
             <Button color="red" variant="outline" onClick={handleSignOut}>

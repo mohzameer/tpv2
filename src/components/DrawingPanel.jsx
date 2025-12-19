@@ -4,9 +4,12 @@ import { useState, useEffect, useRef } from 'react'
 import { getDocumentContent, updateDocumentContent } from '../lib/api'
 import { useTheme } from '../context/ThemeContext'
 import { useSync } from '../context/SyncContext'
-import { Loader, Center } from '@mantine/core'
+import { Loader, Center, Alert, Text } from '@mantine/core'
+import { IconLock } from '@tabler/icons-react'
 
-export default function DrawingPanel({ docId }) {
+export default function DrawingPanel({ docId, editable = true }) {
+  // Treat undefined as "not yet determined" - default to editable
+  const isEditable = editable !== undefined ? editable : true
   const [initialData, setInitialData] = useState(null)
   const saveTimeout = useRef(null)
   const excalidrawRef = useRef(null)
@@ -37,6 +40,7 @@ export default function DrawingPanel({ docId }) {
   }
 
   function handleChange(elements, appState) {
+    if (!isEditable) return // Don't save if not editable
     if (saveTimeout.current) clearTimeout(saveTimeout.current)
     saveTimeout.current = setTimeout(() => {
       saveContent(elements, appState)
@@ -65,6 +69,26 @@ export default function DrawingPanel({ docId }) {
       <Center style={{ height: '100%' }}>
         <Loader size="md" />
       </Center>
+    )
+  }
+
+  // Only show the blocked warning if explicitly not editable
+  // If editable is undefined, we're still loading permissions, so show the editor
+  // This prevents the banner from flashing during initial load
+  if (!isEditable) {
+    return (
+      <div style={{ height: '100%', width: '100%', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Alert
+          icon={<IconLock size={16} />}
+          title="Drawing tool unavailable"
+          color="yellow"
+          style={{ maxWidth: 400 }}
+        >
+          <Text size="sm">
+            Drawing tool is only available to Owners. Editors can edit text content but cannot modify drawings.
+          </Text>
+        </Alert>
+      </div>
     )
   }
 

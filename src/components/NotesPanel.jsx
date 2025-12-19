@@ -139,7 +139,9 @@ async function markdownToBlocksPreservingEmpty(editor, markdown) {
   return resultBlocks.length > 0 ? resultBlocks : [{ type: 'paragraph', content: '' }]
 }
 
-export default function NotesPanel({ docId }) {
+export default function NotesPanel({ docId, editable = true }) {
+  // Treat undefined as "not yet determined" - default to editable
+  const isEditable = editable !== undefined ? editable : true
   const [textMode, setTextMode] = useState('text')
   const [markdownText, setMarkdownText] = useState('')
   const [loading, setLoading] = useState(true)
@@ -261,25 +263,33 @@ export default function NotesPanel({ docId }) {
 
   return (
     <Box style={{ display: 'flex', flexDirection: 'column', height: '100%', position: 'relative' }}>
-      <Box style={{ position: 'absolute', top: 8, right: 8, zIndex: 10 }}>
-        <SegmentedControl
-          size="xs"
-          value={textMode}
-          onChange={handleModeChange}
-          data={[
-            { label: 'Text', value: 'text' },
-            { label: 'Markdown', value: 'markdown' },
-          ]}
-        />
-      </Box>
+      {isEditable && (
+        <Box style={{ position: 'absolute', top: 8, right: 8, zIndex: 10 }}>
+          <SegmentedControl
+            size="xs"
+            value={textMode}
+            onChange={handleModeChange}
+            data={[
+              { label: 'Text', value: 'text' },
+              { label: 'Markdown', value: 'markdown' },
+            ]}
+          />
+        </Box>
+      )}
       <Box style={{ flex: 1, overflow: 'auto', paddingTop: 40, paddingBottom: 400 }}>
         {textMode === 'text' ? (
-          <BlockNoteView editor={editor} theme={colorScheme} onChange={handleChange} />
+          <BlockNoteView 
+            editor={editor} 
+            theme={colorScheme} 
+            onChange={isEditable ? handleChange : undefined}
+            editable={isEditable}
+          />
         ) : (
           <Textarea
             value={markdownText}
-            onChange={(e) => handleMarkdownChange(e.target.value)}
+            onChange={isEditable ? (e) => handleMarkdownChange(e.target.value) : undefined}
             placeholder="Write markdown here..."
+            disabled={!isEditable}
             styles={{
               root: { height: '100%' },
               wrapper: { height: '100%' },

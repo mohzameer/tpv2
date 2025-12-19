@@ -88,10 +88,10 @@ export default function ProjectsModal({ opened, onClose }) {
     
     // Navigate to the document
     if (docToNavigate) {
-      console.log('Navigating to:', `/${p.id}/${docToNavigate}`)
-      navigate(`/${p.id}/${docToNavigate}`)
+      console.log('Navigating to:', `/app/${p.id}/${docToNavigate}`)
+      navigate(`/app/${p.id}/${docToNavigate}`)
     } else {
-      navigate(`/${p.id}`)
+      navigate(`/app/${p.id}`)
     }
   }
 

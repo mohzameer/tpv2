@@ -2,6 +2,7 @@ import { Outlet } from 'react-router-dom'
 import { AppShell } from '@mantine/core'
 import Header from '../components/Header'
 import Sidebar from '../components/Sidebar'
+import PermissionDebugPanel from '../components/PermissionDebugPanel'
 import { useState, useEffect } from 'react'
 
 const SIDEBAR_KEY = 'thinkpost_sidebar_open'
@@ -46,6 +47,7 @@ export default function MainLayout() {
 
       <AppShell.Main style={{ height: 'calc(100vh - 50px)', overflow: 'hidden' }}>
         <Outlet context={{ mode, setMode }} />
+        <PermissionDebugPanel />
       </AppShell.Main>
     </AppShell>
   )

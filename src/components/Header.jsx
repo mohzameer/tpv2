@@ -1,5 +1,5 @@
 import { Group, SegmentedControl, Box, ActionIcon, Loader, Text, TextInput, Menu } from '@mantine/core'
-import { IconSun, IconMoon, IconUser, IconCloud, IconSettings, IconLogout, IconLogin, IconFolder } from '@tabler/icons-react'
+import { IconSun, IconMoon, IconUser, IconCloud, IconSettings, IconLogout, IconLogin, IconFolder, IconUsers } from '@tabler/icons-react'
 import { useTheme } from '../context/ThemeContext'
 import { useSync } from '../context/SyncContext'
 import { useProjectContext } from '../context/ProjectContext'
@@ -9,17 +9,20 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import LoginModal from './LoginModal'
 import ProjectsModal from './ProjectsModal'
+import SharingModal from './SharingModal'
+import { canManageMembers } from '../lib/permissions'
 
 export default function Header({ sidebarOpen, onToggleSidebar, mode, onModeChange }) {
   const { colorScheme, toggleColorScheme } = useTheme()
   const { isSyncing } = useSync()
-  const { project, refreshDocuments } = useProjectContext()
+  const { project, refreshDocuments, userRole, members } = useProjectContext()
   const { user, signOut } = useAuth()
   const navigate = useNavigate()
   const [editing, setEditing] = useState(false)
   const [projectName, setProjectName] = useState('')
   const [showLoginModal, setShowLoginModal] = useState(false)
   const [showProjectsModal, setShowProjectsModal] = useState(false)
+  const [showSharingModal, setShowSharingModal] = useState(false)
 
   function handleDoubleClick() {
     if (project) {
@@ -88,9 +91,20 @@ export default function Header({ sidebarOpen, onToggleSidebar, mode, onModeChang
             <ActionIcon variant="transparent" size="sm" onClick={() => setShowProjectsModal(true)}>
               <IconFolder size={18} color={colorScheme === 'dark' ? '#9ca3af' : '#6b7280'} />
             </ActionIcon>
+            {canManageMembers(userRole) && (
+              <ActionIcon 
+                variant="transparent" 
+                size="sm" 
+                onClick={() => setShowSharingModal(true)}
+                title="Share project"
+              >
+                <IconUsers size={18} color={colorScheme === 'dark' ? '#9ca3af' : '#6b7280'} />
+              </ActionIcon>
+            )}
           </>
         )}
         <ProjectsModal opened={showProjectsModal} onClose={() => setShowProjectsModal(false)} />
+        <SharingModal opened={showSharingModal} onClose={() => setShowSharingModal(false)} />
       </Group>
 
       <Box style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)' }}>
@@ -138,7 +152,19 @@ export default function Header({ sidebarOpen, onToggleSidebar, mode, onModeChang
                   color="red" 
                   leftSection={<IconLogout size={14} />} 
                   onClick={async () => {
-                    await signOut()
+                    console.log('[HEADER] Sign out button clicked')
+                    try {
+                      console.log('[HEADER] Calling signOut()...')
+                      await signOut()
+                      console.log('[HEADER] Sign out successful, navigating to /login')
+                      // Navigate to login page after successful signout
+                      navigate('/login', { replace: true })
+                    } catch (err) {
+                      console.error('[HEADER] Sign out failed:', err)
+                      // Still navigate even if there's an error
+                      console.log('[HEADER] Navigating to /login despite error')
+                      navigate('/login', { replace: true })
+                    }
                   }}
                 >
                   Sign out
