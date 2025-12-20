@@ -12,25 +12,66 @@ function generateProjectId() {
 
 // Projects
 export async function getProjects() {
-  const guestId = getGuestId()
-  const { data, error } = await supabase
+  const { data: { user } } = await supabase.auth.getUser()
+  
+  let query = supabase
     .from('projects')
     .select('*')
-    .eq('guest_id', guestId)
-    .order('created_at', { ascending: false })
+  
+  if (user) {
+    // If user is logged in, get projects by owner_id
+    query = query.eq('owner_id', user.id)
+  } else {
+    // If not logged in, get projects by guest_id
+    const guestId = getGuestId()
+    query = query.eq('guest_id', guestId)
+  }
+  
+  const { data, error } = await query.order('created_at', { ascending: false })
   if (error) throw error
   return data
 }
 
 export async function createProject(name) {
-  const guestId = getGuestId()
+  const { data: { user } } = await supabase.auth.getUser()
+  const projectData = {
+    id: generateProjectId(),
+    name,
+    type: 'native'
+  }
+  
+  if (user) {
+    // If user is logged in, set owner_id
+    projectData.owner_id = user.id
+  } else {
+    // If not logged in, set guest_id
+    projectData.guest_id = getGuestId()
+  }
+  
   const { data, error } = await supabase
     .from('projects')
-    .insert({ id: generateProjectId(), name, guest_id: guestId, type: 'native' })
+    .insert(projectData)
     .select()
     .single()
   if (error) throw error
   return data
+}
+
+export async function claimGuestProjects() {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return
+  
+  const guestId = getGuestId()
+  if (!guestId) return
+  
+  // Transfer all guest projects to the user
+  const { error } = await supabase
+    .from('projects')
+    .update({ owner_id: user.id, guest_id: null })
+    .eq('guest_id', guestId)
+    .is('owner_id', null)
+  
+  if (error) throw error
 }
 
 export async function deleteProject(id) {
