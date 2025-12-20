@@ -44,7 +44,9 @@ export default function Sidebar({ onCollapse }) {
   // Save last visited whenever docId changes
   useEffect(() => {
     if (project && docId) {
-      setLastVisited(project.id, docId)
+      setLastVisited(project.id, docId).catch(err => {
+        console.error('Failed to save last visited:', err)
+      })
     }
   }, [project, docId])
 

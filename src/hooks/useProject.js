@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { getProjects, createProject, getDocuments, createDocument, deleteProject } from '../lib/api'
 import { getLastVisited, setLastVisited, getLastDocumentForProject } from '../lib/lastVisited'
+import { supabase } from '../lib/supabase'
 
 export function useProject() {
   const [project, setProject] = useState(null)
@@ -9,6 +10,16 @@ export function useProject() {
 
   useEffect(() => {
     initProject()
+    
+    // Reload projects when auth state changes (e.g., after login)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        // User logged in, reload projects to get claimed ones
+        initProject()
+      }
+    })
+    
+    return () => subscription.unsubscribe()
   }, [])
 
   async function resetProject() {
@@ -44,7 +55,7 @@ export function useProject() {
       }
 
       // Check for last visited project
-      const lastVisited = getLastVisited()
+      const lastVisited = await getLastVisited()
       let currentProject = projects[0]
       
       if (lastVisited?.projectId) {
@@ -120,7 +131,7 @@ export function useProject() {
       }
       
       // Persist the project selection with the target document
-      setLastVisited(targetProject.id, targetDocId)
+      await setLastVisited(targetProject.id, targetDocId)
       
       return targetDocId
     } catch (err) {

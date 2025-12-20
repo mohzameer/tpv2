@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
-import { claimGuestProjects } from '../lib/api'
+import { claimGuestProjects, createUserProfile } from '../lib/api'
 
 const AuthContext = createContext(null)
 
@@ -47,6 +47,17 @@ export function AuthProvider({ children }) {
   async function signUp(email, password) {
     const { data, error } = await supabase.auth.signUp({ email, password })
     if (error) throw error
+    
+    // Create user profile with email if user is created
+    if (data.user) {
+      try {
+        await createUserProfile(data.user.id, email)
+      } catch (err) {
+        console.error('Failed to create user profile:', err)
+        // Don't throw - profile creation failure shouldn't block signup
+      }
+    }
+    
     // claimGuestProjects will be called by handleAuthChange if user is immediately signed in
     return data
   }

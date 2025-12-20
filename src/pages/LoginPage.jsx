@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Container, Paper, TextInput, PasswordInput, Button, Title, Text, Stack, Anchor, Alert } from '@mantine/core'
 import { useAuth } from '../context/AuthContext'
+import { getLastVisited } from '../lib/lastVisited'
+import { getProjects, getDocuments } from '../lib/api'
 
 export default function LoginPage() {
   const [isSignUp, setIsSignUp] = useState(false)
@@ -25,6 +27,46 @@ export default function LoginPage() {
         setMessage('Check your email to confirm your account')
       } else {
         await signIn(email, password)
+        
+        // claimGuestProjects is called automatically in AuthContext.handleAuthChange
+        // Wait for projects to be available (which implies claim is complete)
+        // Then try to navigate to last visited project/document from database
+        try {
+          const projects = await getProjects()
+          const lastVisited = await getLastVisited()
+          
+          if (lastVisited?.projectId && lastVisited?.docId) {
+            // Verify the project and document still exist
+            const project = projects.find(p => p.id === lastVisited.projectId)
+            if (project) {
+              const docs = await getDocuments(project.id)
+              const doc = docs.find(d => String(d.id) === String(lastVisited.docId))
+              if (doc) {
+                navigate(`/${project.id}/${doc.id}`, { replace: true })
+                return
+              }
+              // If doc not found, navigate to first document in project
+              if (docs.length > 0) {
+                navigate(`/${project.id}/${docs[0].id}`, { replace: true })
+                return
+              }
+            }
+          }
+          
+          // If no last visited or project not found, navigate to first project's first doc
+          if (projects.length > 0) {
+            const firstProject = projects[0]
+            const docs = await getDocuments(firstProject.id)
+            if (docs.length > 0) {
+              navigate(`/${firstProject.id}/${docs[0].id}`, { replace: true })
+              return
+            }
+          }
+        } catch (err) {
+          console.error('Failed to load projects or verify last visited:', err)
+        }
+        
+        // Fallback to home page
         navigate('/')
       }
     } catch (err) {

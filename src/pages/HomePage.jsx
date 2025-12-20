@@ -11,13 +11,17 @@ export default function HomePage() {
   useEffect(() => {
     if (loading) return
 
-    const lastVisited = getLastVisited()
-    
-    if (lastVisited?.projectId && lastVisited?.docId) {
-      navigate(`/${lastVisited.projectId}/${lastVisited.docId}`, { replace: true })
-    } else if (project && documents.length > 0) {
-      navigate(`/${project.id}/${documents[0].id}`, { replace: true })
+    async function navigateToLastVisited() {
+      const lastVisited = await getLastVisited()
+      
+      if (lastVisited?.projectId && lastVisited?.docId) {
+        navigate(`/${lastVisited.projectId}/${lastVisited.docId}`, { replace: true })
+      } else if (project && documents.length > 0) {
+        navigate(`/${project.id}/${documents[0].id}`, { replace: true })
+      }
     }
+    
+    navigateToLastVisited()
   }, [loading, project, documents, navigate])
 
   return (

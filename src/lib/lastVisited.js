@@ -1,7 +1,25 @@
+import { getUserLastVisited, setUserLastVisited as setUserLastVisitedDB } from './api'
+import { supabase } from './supabase'
+
 const LAST_VISITED_KEY = 'thinkpost_last_visited'
 
-// Get last visited project and document (for backward compatibility)
-export function getLastVisited() {
+// Get last visited project and document
+// For logged-in users: fetch from database
+// For guests: use localStorage
+export async function getLastVisited() {
+  const { data: { user } } = await supabase.auth.getUser()
+  
+  if (user) {
+    // For logged-in users, get from database
+    try {
+      return await getUserLastVisited()
+    } catch (err) {
+      console.error('Failed to get last visited from database:', err)
+      // Fallback to localStorage
+    }
+  }
+  
+  // For guests or if DB fetch fails, use localStorage
   const stored = localStorage.getItem(LAST_VISITED_KEY)
   if (!stored) return null
   try {
@@ -40,7 +58,22 @@ export function getLastDocumentForProject(projectId) {
 }
 
 // Set last visited project and document
-export function setLastVisited(projectId, docId) {
+// For logged-in users: save to database
+// For guests: save to localStorage
+export async function setLastVisited(projectId, docId) {
+  const { data: { user } } = await supabase.auth.getUser()
+  
+  if (user) {
+    // For logged-in users, save to database
+    try {
+      await setUserLastVisitedDB(projectId, docId)
+    } catch (err) {
+      console.error('Failed to save last visited to database:', err)
+      // Fallback to localStorage
+    }
+  }
+  
+  // Always update localStorage (for guests and as fallback)
   const stored = localStorage.getItem(LAST_VISITED_KEY)
   let data = {}
   

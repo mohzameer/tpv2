@@ -150,3 +150,111 @@ export async function updateDocumentContent(documentId, { notes_content, drawing
   if (error) throw error
   return data
 }
+
+// User Profiles - Last Visited
+export async function getUserLastVisited() {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return null
+  
+  const { data, error } = await supabase
+    .from('user_profiles')
+    .select('last_project_id, last_doc_id')
+    .eq('user_id', user.id)
+    .single()
+  
+  if (error && error.code !== 'PGRST116') throw error
+  if (!data) return null
+  
+  return {
+    projectId: data.last_project_id,
+    docId: data.last_doc_id
+  }
+}
+
+export async function setUserLastVisited(projectId, docId) {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return
+  
+  // Get existing profile to preserve display_name and email
+  const { data: existing } = await supabase
+    .from('user_profiles')
+    .select('display_name, email')
+    .eq('user_id', user.id)
+    .single()
+  
+  const { error } = await supabase
+    .from('user_profiles')
+    .upsert({
+      user_id: user.id,
+      email: existing?.email || user.email || null,
+      display_name: existing?.display_name || null,
+      last_project_id: projectId,
+      last_doc_id: docId,
+      updated_at: new Date().toISOString()
+    }, {
+      onConflict: 'user_id'
+    })
+  
+  if (error) throw error
+}
+
+// User Profiles - Display Name
+export async function getUserProfile() {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return null
+  
+  const { data, error } = await supabase
+    .from('user_profiles')
+    .select('email, display_name')
+    .eq('user_id', user.id)
+    .single()
+  
+  if (error && error.code !== 'PGRST116') throw error
+  return data
+}
+
+export async function createUserProfile(userId, email) {
+  const { data, error } = await supabase
+    .from('user_profiles')
+    .insert({
+      user_id: userId,
+      email: email,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    })
+    .select()
+    .single()
+  
+  if (error) throw error
+  return data
+}
+
+export async function updateUserDisplayName(displayName) {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('User not authenticated')
+  
+  // Get existing profile to preserve last_project_id, last_doc_id, and email
+  const { data: existing } = await supabase
+    .from('user_profiles')
+    .select('last_project_id, last_doc_id, email')
+    .eq('user_id', user.id)
+    .single()
+  
+  const { data, error } = await supabase
+    .from('user_profiles')
+    .upsert({
+      user_id: user.id,
+      email: existing?.email || user.email || null,
+      display_name: displayName || null,
+      last_project_id: existing?.last_project_id || null,
+      last_doc_id: existing?.last_doc_id || null,
+      updated_at: new Date().toISOString()
+    }, {
+      onConflict: 'user_id'
+    })
+    .select()
+    .single()
+  
+  if (error) throw error
+  return data
+}
