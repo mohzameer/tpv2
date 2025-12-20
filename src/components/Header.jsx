@@ -139,6 +139,7 @@ export default function Header({ sidebarOpen, onToggleSidebar, mode, onModeChang
                   leftSection={<IconLogout size={14} />} 
                   onClick={async () => {
                     await signOut()
+                    navigate('/login')
                   }}
                 >
                   Sign out
