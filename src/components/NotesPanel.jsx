@@ -8,6 +8,7 @@ import { useState, useEffect, useRef } from 'react'
 import { getDocumentContent, updateDocumentContent } from '../lib/api'
 import { useTheme } from '../context/ThemeContext'
 import { useSync } from '../context/SyncContext'
+import { useAuth } from '../context/AuthContext'
 
 // Only keep markdown-compatible block types
 const { 
@@ -150,12 +151,14 @@ export default function NotesPanel({ docId }) {
   const { colorScheme } = useTheme()
   const { setIsSyncing } = useSync()
 
-  // Load content when docId changes
+  // Load content when docId changes or when auth state changes (user logs in/out)
+  const { user } = useAuth()
+  
   useEffect(() => {
     if (!docId) return
     setLoading(true)
     loadContent()
-  }, [docId])
+  }, [docId, user]) // Reload when docId or user (auth state) changes
 
   async function loadContent() {
     try {

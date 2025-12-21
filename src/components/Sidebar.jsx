@@ -2,10 +2,11 @@ import { Stack, ActionIcon, Loader, Center, Box, Group, Text, TextInput, Modal, 
 import { IconFile, IconPlus, IconChevronLeft, IconTrash } from '@tabler/icons-react'
 import './Sidebar.css'
 import { useNavigate, useParams } from 'react-router-dom'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useProjectContext } from '../context/ProjectContext'
 import { setLastVisited, getLastDocumentForProject } from '../lib/lastVisited'
 import { updateDocument, deleteDocument } from '../lib/api'
+import { useAuth } from '../context/AuthContext'
 
 function formatDate(dateString) {
   if (!dateString) return ''
@@ -25,28 +26,66 @@ export default function Sidebar({ onCollapse }) {
   const navigate = useNavigate()
   const { docId } = useParams()
   const { project, documents, loading, addDocument, refreshDocuments } = useProjectContext()
+  const { user } = useAuth()
   const [editingId, setEditingId] = useState(null)
   const [editingTitle, setEditingTitle] = useState('')
   const [deleteConfirm, setDeleteConfirm] = useState(null)
+  const savingRef = useRef(false)
 
   useEffect(() => {
     if (!loading && !docId && documents.length > 0 && project) {
-      // Check for last visited document for this project
-      // Compare as strings to handle type mismatches
-      const lastDocId = getLastDocumentForProject(project.id)
-      const lastDocIdStr = lastDocId ? String(lastDocId) : null
-      const foundDoc = lastDocIdStr ? documents.find(d => String(d.id) === lastDocIdStr) : null
-      const docToUse = foundDoc ? foundDoc.id : documents[0].id
+      // For guest users: always use first document
+      // For logged-in users: check for last visited document for this project
+      let docToUse = documents[0].id
+      
+      if (user) {
+        // Only check last visited for logged-in users
+        const lastDocId = getLastDocumentForProject(project.id)
+        const lastDocIdStr = lastDocId ? String(lastDocId) : null
+        const foundDoc = lastDocIdStr ? documents.find(d => String(d.id) === lastDocIdStr) : null
+        if (foundDoc) {
+          docToUse = foundDoc.id
+        }
+      }
+      
       navigate(`/${project.id}/${docToUse}`, { replace: true })
     }
-  }, [docId, documents, loading, project, navigate])
+  }, [docId, documents, loading, project, navigate, user])
 
-  // Save last visited whenever docId changes
+  // Save last visited whenever docId changes, but only if:
+  // 1. The docId actually exists in the current project's documents
+  // 2. We're not in the middle of a navigation/login flow
+  // 3. Add a small delay to prevent saving during rapid navigation
   useEffect(() => {
-    if (project && docId) {
-      setLastVisited(project.id, docId)
-    }
-  }, [project, docId])
+    if (!project || !docId || loading || savingRef.current) return
+    
+    // Add a small delay to prevent saving during rapid navigation changes
+    const timeoutId = setTimeout(() => {
+      // Verify the document exists in the current project
+      const docExists = documents.some(d => String(d.id) === String(docId))
+      if (!docExists) {
+        console.log('Sidebar: Not saving - docId', docId, 'not found in current project documents. Available docs:', documents.map(d => d.id))
+        return
+      }
+      
+      // Verify the docId matches the project (safety check)
+      if (project && documents.length > 0) {
+        console.log('Sidebar: Saving last visited - project:', project.id, 'docId:', docId, 'docExists:', docExists, 'documents:', documents.map(d => ({ id: d.id, title: d.title })))
+        savingRef.current = true
+        setLastVisited(project.id, docId)
+          .then(() => {
+            savingRef.current = false
+            console.log('Sidebar: Successfully saved last visited')
+          })
+          .catch(err => {
+            console.error('Sidebar: Failed to save last visited:', err)
+            savingRef.current = false
+          })
+      }
+    }, 200) // 200ms delay to allow navigation to settle
+    
+    return () => clearTimeout(timeoutId)
+  }, [project, docId, documents, loading])
 
   async function handleAddDocument() {
     const doc = await addDocument()

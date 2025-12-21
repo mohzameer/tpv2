@@ -1,17 +1,37 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Container, Paper, TextInput, PasswordInput, Button, Title, Stack, Alert, Group, Divider } from '@mantine/core'
 import { useAuth } from '../context/AuthContext'
+import { getUserProfile, updateUserDisplayName } from '../lib/api'
 
 export default function SettingsPage() {
   const { user, updateProfile, signOut } = useAuth()
   const navigate = useNavigate()
   
+  const [displayName, setDisplayName] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [loading, setLoading] = useState(false)
+  const [loadingProfile, setLoadingProfile] = useState(true)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
+
+  useEffect(() => {
+    async function loadProfile() {
+      if (!user) return
+      try {
+        const profile = await getUserProfile()
+        if (profile?.display_name) {
+          setDisplayName(profile.display_name)
+        }
+      } catch (err) {
+        console.error('Failed to load profile:', err)
+      } finally {
+        setLoadingProfile(false)
+      }
+    }
+    loadProfile()
+  }, [user])
 
   function validatePassword(pwd) {
     if (pwd.length < 8) return 'Password must be at least 8 characters'
@@ -52,6 +72,22 @@ export default function SettingsPage() {
     }
   }
 
+  async function handleUpdateDisplayName(e) {
+    e.preventDefault()
+    setError('')
+    setMessage('')
+    setLoading(true)
+
+    try {
+      await updateUserDisplayName(displayName.trim())
+      setMessage('Display name updated successfully')
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
   async function handleSignOut() {
     await signOut()
     navigate('/login')
@@ -68,6 +104,28 @@ export default function SettingsPage() {
             value={user?.email || ''}
             disabled
           />
+
+          <Divider my="sm" label="Profile" labelPosition="center" />
+
+          <form onSubmit={handleUpdateDisplayName}>
+            <Stack>
+              <TextInput
+                label="Display Name"
+                placeholder="Enter your display name"
+                value={displayName}
+                onChange={(e) => {
+                  if (e.target.value.length <= 100) {
+                    setDisplayName(e.target.value)
+                  }
+                }}
+                maxLength={100}
+                disabled={loadingProfile}
+              />
+              <Button type="submit" loading={loading} disabled={loadingProfile}>
+                Update Display Name
+              </Button>
+            </Stack>
+          </form>
 
           <Divider my="sm" label="Change Password" labelPosition="center" />
 

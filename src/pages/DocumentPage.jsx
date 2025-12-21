@@ -2,6 +2,8 @@ import { useParams, useOutletContext } from 'react-router-dom'
 import WorkspacePanel from '../components/WorkspacePanel'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { getDocumentContent, updateDocumentContent } from '../lib/api'
+import { useAuth } from '../context/AuthContext'
+import { useProjectContext } from '../context/ProjectContext'
 
 export default function DocumentPage() {
   const { projectId, docId } = useParams()
@@ -10,21 +12,82 @@ export default function DocumentPage() {
   const [loaded, setLoaded] = useState(false)
   const saveTimeout = useRef(null)
   const docIdRef = useRef(docId)
+  const { user, loading: authLoading } = useAuth()
+  const { project, switchProject, loading: projectLoading } = useProjectContext()
+  const navigatingRef = useRef(false)
+  const lastProjectIdRef = useRef(projectId)
 
   // Keep docIdRef in sync
   useEffect(() => {
     docIdRef.current = docId
   }, [docId])
 
+  // Track when projectId changes (navigation happening)
+  useEffect(() => {
+    if (projectId !== lastProjectIdRef.current) {
+      navigatingRef.current = true
+      lastProjectIdRef.current = projectId
+      // Clear the navigating flag after navigation completes
+      setTimeout(() => {
+        navigatingRef.current = false
+      }, 300)
+    }
+  }, [projectId])
+
+  // Sync project with URL projectId - ensure the project in context matches the URL
+  // Add a small delay to prevent race conditions when switching projects
+  useEffect(() => {
+    if (!projectId || projectLoading) {
+      return
+    }
+    
+    // Don't sync if we're in the middle of navigation - wait for it to complete
+    if (navigatingRef.current) {
+      return
+    }
+    
+    // If project is already correct, no need to switch
+    if (project && project.id === projectId) {
+      return
+    }
+    
+    // Add a small delay to allow switchProject to complete if it was just called
+    const timer = setTimeout(() => {
+      // Check again if we're still navigating
+      if (navigatingRef.current) {
+        return
+      }
+      
+      if (project && project.id !== projectId && !projectLoading) {
+        switchProject(projectId)
+      }
+    }, 200)
+    
+    return () => clearTimeout(timer)
+  }, [projectId, project, switchProject, projectLoading])
+
   useEffect(() => {
     if (!docId) return
+    
+    // Wait for auth to be ready before loading (prevents loading wrong doc during login)
+    if (authLoading) {
+      return
+    }
+    
     // Clear any pending saves from previous doc
     if (saveTimeout.current) {
       clearTimeout(saveTimeout.current)
       saveTimeout.current = null
     }
-    loadLayout()
-  }, [docId])
+    
+    // Small delay to allow navigation to complete after login
+    // This prevents loading the wrong document if user just logged in
+    const timer = setTimeout(() => {
+      loadLayout()
+    }, 300)
+    
+    return () => clearTimeout(timer)
+  }, [docId, user, authLoading]) // Reload when docId, user (auth state), or authLoading changes
 
   const handleModeChangeFromHeader = useCallback((newMode) => {
     setMode(newMode)
@@ -43,9 +106,7 @@ export default function DocumentPage() {
   async function loadLayout() {
     setLoaded(false)
     try {
-      console.log('Loading layout for docId:', docId)
       const content = await getDocumentContent(docId)
-      console.log('Loaded content:', content)
       if (content?.layout_mode) {
         setMode(content.layout_mode)
       }
@@ -77,7 +138,6 @@ export default function DocumentPage() {
   async function saveLayout(layoutMode, ratio, targetDocId) {
     if (!targetDocId) return
     try {
-      console.log('Saving layout for docId:', targetDocId, 'mode:', layoutMode, 'ratio:', ratio)
       await updateDocumentContent(targetDocId, { layout_mode: layoutMode, layout_ratio: ratio })
     } catch (err) {
       console.error('Failed to save layout:', err)
