@@ -8,15 +8,27 @@ export function useProject() {
   const [documents, setDocuments] = useState([])
   const [loading, setLoading] = useState(true)
   const switchingRef = useRef(false)
+  const lastUserIdRef = useRef(null) // Track last user ID to detect actual user changes
+  const initialLoadRef = useRef(false) // Track if initial load has completed
 
   useEffect(() => {
     initProject()
+    initialLoadRef.current = true
     
     // Reload projects when auth state changes (e.g., after login or logout)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    // Only reload on SIGNED_IN or SIGNED_OUT events, not on TOKEN_REFRESHED
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      const currentUserId = session?.user?.id || null
+      const userIdChanged = lastUserIdRef.current !== currentUserId
+      
+      // Update last user ID
+      lastUserIdRef.current = currentUserId
+      
       // Only reload if we're not in the middle of switching projects
-      if (!switchingRef.current) {
-        // Reload projects on both login and logout to ensure proper scoping
+      // For SIGNED_IN events after initial load, only reload if user actually changed
+      // This prevents reloads on session recovery (tab becoming visible)
+      if (!switchingRef.current && (event === 'SIGNED_OUT' || (event === 'SIGNED_IN' && (userIdChanged || !initialLoadRef.current)))) {
+        // Reload projects on login/logout to ensure proper scoping
         initProject()
       }
     })
