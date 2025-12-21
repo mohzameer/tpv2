@@ -26,9 +26,9 @@ export default function ProjectsModal({ opened, onClose }) {
     setLoading(true)
     try {
       const data = await getProjects()
-      setProjects(data)
+      setProjects(data || [])
     } catch (err) {
-      console.error('Failed to load projects:', err)
+      console.error('ProjectsModal: Failed to load projects:', err)
     } finally {
       setLoading(false)
     }
@@ -57,17 +57,11 @@ export default function ProjectsModal({ opened, onClose }) {
     
     // Get the last visited document for this project BEFORE switching
     const lastDocId = getLastDocumentForProject(p.id)
-    console.log('Last doc ID for project', p.id, ':', lastDocId)
     
-    // Switch project
-    await switchProject(p.id)
-    
-    // Get documents after switching (they should be loaded by switchProject)
-    // But we'll get them again to be sure we have the latest
+    // Get documents BEFORE switching (to avoid race conditions)
     let docToNavigate = null
     try {
       const docs = await getDocuments(p.id)
-      console.log('Documents for project', p.id, ':', docs.map(d => ({ id: d.id, title: d.title })))
       
       if (docs.length > 0) {
         // Use last visited document if it exists in the documents list
@@ -76,23 +70,27 @@ export default function ProjectsModal({ opened, onClose }) {
         const foundDoc = docs.find(d => String(d.id) === lastDocIdStr)
         if (lastDocId && foundDoc) {
           docToNavigate = foundDoc.id
-          console.log('Using last visited document:', docToNavigate)
         } else {
           docToNavigate = docs[0].id
-          console.log('Using first document:', docToNavigate, '(lastDocId was:', lastDocId, ')')
         }
       }
     } catch (err) {
       console.error('Failed to get documents:', err)
     }
     
-    // Navigate to the document
+    // Navigate FIRST, then switch project
+    // This ensures the URL updates before DocumentPage's sync check runs
     if (docToNavigate) {
-      console.log('Navigating to:', `/${p.id}/${docToNavigate}`)
-      navigate(`/${p.id}/${docToNavigate}`)
+      navigate(`/${p.id}/${docToNavigate}`, { replace: true })
     } else {
-      navigate(`/${p.id}`)
+      navigate(`/${p.id}`, { replace: true })
     }
+    
+    // Small delay to let navigation start
+    await new Promise(resolve => setTimeout(resolve, 50))
+    
+    // Switch project AFTER navigation
+    await switchProject(p.id)
   }
 
   return (

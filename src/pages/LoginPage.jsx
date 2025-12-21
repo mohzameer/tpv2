@@ -1,9 +1,9 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { Container, Paper, TextInput, PasswordInput, Button, Title, Text, Stack, Anchor, Alert } from '@mantine/core'
 import { useAuth } from '../context/AuthContext'
-import { getLastVisited } from '../lib/lastVisited'
-import { getProjects, getDocuments } from '../lib/api'
+import { getUserLastVisited, getProjects, getDocuments } from '../lib/api'
+import { supabase } from '../lib/supabase'
 
 export default function LoginPage() {
   const [isSignUp, setIsSignUp] = useState(false)
@@ -14,6 +14,7 @@ export default function LoginPage() {
   const [message, setMessage] = useState('')
   const { signIn, signUp } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -28,46 +29,115 @@ export default function LoginPage() {
       } else {
         await signIn(email, password)
         
-        // claimGuestProjects is called automatically in AuthContext.handleAuthChange
-        // Wait for projects to be available (which implies claim is complete)
-        // Then try to navigate to last visited project/document from database
-        try {
-          const projects = await getProjects()
-          const lastVisited = await getLastVisited()
-          
-          if (lastVisited?.projectId && lastVisited?.docId) {
-            // Verify the project and document still exist
-            const project = projects.find(p => p.id === lastVisited.projectId)
-            if (project) {
-              const docs = await getDocuments(project.id)
-              const doc = docs.find(d => String(d.id) === String(lastVisited.docId))
-              if (doc) {
-                navigate(`/${project.id}/${doc.id}`, { replace: true })
-                return
-              }
-              // If doc not found, navigate to first document in project
-              if (docs.length > 0) {
-                navigate(`/${project.id}/${docs[0].id}`, { replace: true })
-                return
-              }
-            }
+        // Wait for auth session to be ready
+        let session = null
+        let retries = 0
+        while (!session && retries < 10) {
+          const { data } = await supabase.auth.getSession()
+          session = data?.session
+          if (!session) {
+            await new Promise(resolve => setTimeout(resolve, 200))
+            retries++
           }
-          
-          // If no last visited or project not found, navigate to first project's first doc
-          if (projects.length > 0) {
-            const firstProject = projects[0]
-            const docs = await getDocuments(firstProject.id)
-            if (docs.length > 0) {
-              navigate(`/${firstProject.id}/${docs[0].id}`, { replace: true })
+        }
+        
+        if (!session) {
+          console.error('LoginPage: Could not get session after login')
+          return
+        }
+        
+        console.log('LoginPage: Session ready, claimGuestProjects should have run')
+        
+        // Wait a bit for claimGuestProjects to complete and projects to reload
+        await new Promise(resolve => setTimeout(resolve, 300))
+        
+        // Get user's projects (should now include claimed guest projects)
+        const projects = await getProjects()
+        console.log('LoginPage: Projects loaded (including claimed):', projects.length, projects.map(p => p.id))
+        
+        // Check if user was on a project/doc route before login (from localStorage)
+        const LAST_VISITED_KEY = 'thinkpost_last_visited'
+        const stored = localStorage.getItem(LAST_VISITED_KEY)
+        let guestProjectId = null
+        let guestDocId = null
+        
+        if (stored) {
+          try {
+            const data = JSON.parse(stored)
+            guestProjectId = data.projectId || data.lastProjectId
+            guestDocId = data.docId || data.lastDocId
+            console.log('LoginPage: Found guest project/doc in localStorage:', guestProjectId, guestDocId)
+          } catch (e) {
+            console.log('LoginPage: Could not parse localStorage:', e)
+          }
+        }
+        
+        // Priority 1: If user was working on a guest project that was just claimed, stay on it
+        if (guestProjectId && guestDocId) {
+          const claimedProject = projects.find(p => p.id === guestProjectId)
+          if (claimedProject) {
+            console.log('LoginPage: Found claimed guest project:', guestProjectId)
+            const docs = await getDocuments(claimedProject.id)
+            const doc = docs.find(d => {
+              const docIdNum = typeof d.id === 'number' ? d.id : parseInt(d.id, 10)
+              const guestDocIdNum = typeof guestDocId === 'number' ? guestDocId : parseInt(guestDocId, 10)
+              return docIdNum === guestDocIdNum
+            })
+            
+            if (doc) {
+              console.log('LoginPage: Staying on claimed project/doc:', claimedProject.id, doc.id)
+              navigate(`/${claimedProject.id}/${doc.id}`, { replace: true })
+              return
+            } else if (docs.length > 0) {
+              console.log('LoginPage: Guest doc not found, using first doc in claimed project')
+              navigate(`/${claimedProject.id}/${docs[0].id}`, { replace: true })
               return
             }
           }
-        } catch (err) {
-          console.error('Failed to load projects or verify last visited:', err)
         }
         
-        // Fallback to home page
-        navigate('/')
+        // Priority 2: Get last visited from user profile (for returning users)
+        const lastVisited = await getUserLastVisited()
+        console.log('LoginPage: Last visited from user profile:', lastVisited)
+        
+        if (lastVisited?.projectId && lastVisited?.docId && projects.length > 0) {
+          const project = projects.find(p => p.id === lastVisited.projectId)
+          if (project) {
+            const docs = await getDocuments(project.id)
+            const doc = docs.find(d => {
+              const docIdNum = typeof d.id === 'number' ? d.id : parseInt(d.id, 10)
+              const lastDocIdNum = typeof lastVisited.docId === 'number' ? lastVisited.docId : parseInt(lastVisited.docId, 10)
+              return docIdNum === lastDocIdNum
+            })
+            
+            if (doc) {
+              console.log('LoginPage: Navigating to last visited from profile:', project.id, doc.id)
+              navigate(`/${project.id}/${doc.id}`, { replace: true })
+              return
+            } else if (docs.length > 0) {
+              console.log('LoginPage: Last doc not found, using first doc in project')
+              navigate(`/${project.id}/${docs[0].id}`, { replace: true })
+              return
+            }
+          }
+        }
+        
+        // Priority 3: Navigate to first project's first document (new users or fallback)
+        if (projects.length > 0) {
+          const firstProject = projects[0]
+          const docs = await getDocuments(firstProject.id)
+          if (docs.length > 0) {
+            console.log('LoginPage: Navigating to first project/doc:', firstProject.id, docs[0].id)
+            navigate(`/${firstProject.id}/${docs[0].id}`, { replace: true })
+            return
+          }
+          console.log('LoginPage: Navigating to project:', firstProject.id)
+          navigate(`/${firstProject.id}`, { replace: true })
+          return
+        }
+        
+        // Should never happen, but just in case
+        console.log('LoginPage: No projects found, staying on login page')
       }
     } catch (err) {
       setError(err.message)

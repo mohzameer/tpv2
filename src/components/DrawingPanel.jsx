@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { getDocumentContent, updateDocumentContent } from '../lib/api'
 import { useTheme } from '../context/ThemeContext'
 import { useSync } from '../context/SyncContext'
+import { useAuth } from '../context/AuthContext'
 import { Loader, Center } from '@mantine/core'
 
 export default function DrawingPanel({ docId }) {
@@ -13,11 +14,12 @@ export default function DrawingPanel({ docId }) {
   const lastSavedContent = useRef(null)
   const { colorScheme } = useTheme()
   const { setIsSyncing } = useSync()
+  const { user } = useAuth()
 
   useEffect(() => {
     if (!docId) return
     loadContent()
-  }, [docId])
+  }, [docId, user]) // Reload when docId or user (auth state) changes
 
   async function loadContent() {
     try {
@@ -71,6 +73,7 @@ export default function DrawingPanel({ docId }) {
   return (
     <div style={{ height: '100%', width: '100%', position: 'relative' }}>
       <Excalidraw
+        key={`${docId}-${user?.id || 'guest'}`} // Force remount when docId or user changes
         ref={excalidrawRef}
         initialData={initialData}
         zenModeEnabled={true}

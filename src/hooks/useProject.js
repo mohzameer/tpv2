@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { getProjects, createProject, getDocuments, createDocument, deleteProject } from '../lib/api'
 import { getLastVisited, setLastVisited, getLastDocumentForProject } from '../lib/lastVisited'
 import { supabase } from '../lib/supabase'
@@ -7,14 +7,16 @@ export function useProject() {
   const [project, setProject] = useState(null)
   const [documents, setDocuments] = useState([])
   const [loading, setLoading] = useState(true)
+  const switchingRef = useRef(false)
 
   useEffect(() => {
     initProject()
     
-    // Reload projects when auth state changes (e.g., after login)
+    // Reload projects when auth state changes (e.g., after login or logout)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.user) {
-        // User logged in, reload projects to get claimed ones
+      // Only reload if we're not in the middle of switching projects
+      if (!switchingRef.current) {
+        // Reload projects on both login and logout to ensure proper scoping
         initProject()
       }
     })
@@ -44,24 +46,81 @@ export function useProject() {
   }
 
   async function initProject() {
+    // Don't run if we're in the middle of switching projects
+    if (switchingRef.current) {
+      return
+    }
+
     setLoading(true)
     try {
       let projects = await getProjects()
       
-      // Create default project if none exists
+      // Create default project if none exists (for first-time users/guests)
+      // This ensures guest users get a project on first root URL load
       if (projects.length === 0) {
         const newProject = await createProject('My Project')
         projects = [newProject]
       }
 
-      // Check for last visited project
-      const lastVisited = await getLastVisited()
-      let currentProject = projects[0]
+      // Priority 0: Check URL first - if we're on a project route, use that project
+      // This prevents flickering when switching projects
+      const pathname = window.location.pathname
+      const urlProjectId = pathname.split('/').filter(Boolean)[0] // Get first path segment (projectId)
       
-      if (lastVisited?.projectId) {
-        const lastProject = projects.find(p => p.id === lastVisited.projectId)
-        if (lastProject) {
-          currentProject = lastProject
+      // If current project already matches URL, don't change it (prevents flickering)
+      if (project && project.id === urlProjectId) {
+        setLoading(false)
+        return
+      }
+      
+      let currentProject = projects[0]
+      let foundUrlProject = false
+      
+      if (urlProjectId && urlProjectId !== 'login' && urlProjectId !== 'settings') {
+        const urlProject = projects.find(p => p.id === urlProjectId)
+        if (urlProject) {
+          currentProject = urlProject
+          foundUrlProject = true
+        }
+      }
+
+      // Priority 1: Check localStorage for guest project (user might have just logged in and claimed it)
+      // Only if we didn't find a project in the URL
+      if (!foundUrlProject) {
+        const LAST_VISITED_KEY = 'thinkpost_last_visited'
+        const stored = localStorage.getItem(LAST_VISITED_KEY)
+        let guestProjectId = null
+        let foundGuestProject = false
+        
+        if (stored) {
+          try {
+            const data = JSON.parse(stored)
+            guestProjectId = data.projectId || data.lastProjectId
+          } catch (e) {
+            // Could not parse localStorage
+          }
+        }
+        
+        // If we have a guest project ID and it exists in projects (was just claimed), use it
+        // This takes priority over database last visited because it's what the user was just working on
+        if (guestProjectId) {
+          const claimedProject = projects.find(p => p.id === guestProjectId)
+          if (claimedProject) {
+            currentProject = claimedProject
+            foundGuestProject = true
+          }
+        }
+        
+        // Priority 2: Check for last visited project from database (ONLY if we didn't find a guest project)
+        // This is for returning users who didn't just log in
+        if (!foundGuestProject) {
+          const lastVisited = await getLastVisited()
+          if (lastVisited?.projectId) {
+            const lastProject = projects.find(p => p.id === lastVisited.projectId)
+            if (lastProject) {
+              currentProject = lastProject
+            }
+          }
         }
       }
 
@@ -98,12 +157,15 @@ export function useProject() {
   }
 
   async function switchProject(projectId) {
+    // Set flag to prevent initProject from running during switch
+    switchingRef.current = true
     setLoading(true)
     try {
       const projects = await getProjects()
       const targetProject = projects.find(p => p.id === projectId)
       if (!targetProject) {
         setLoading(false)
+        switchingRef.current = false
         return null
       }
       
@@ -137,9 +199,14 @@ export function useProject() {
     } catch (err) {
       console.error('Failed to switch project:', err)
       setLoading(false)
+      switchingRef.current = false
       return null
     } finally {
       setLoading(false)
+      // Clear flag after a short delay to allow state to settle
+      setTimeout(() => {
+        switchingRef.current = false
+      }, 500)
     }
   }
 
