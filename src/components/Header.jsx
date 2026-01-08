@@ -1,5 +1,5 @@
 import { Group, SegmentedControl, Box, ActionIcon, Loader, Text, TextInput, Menu } from '@mantine/core'
-import { IconSun, IconMoon, IconUser, IconCloud, IconSettings, IconLogout, IconLogin, IconFolder } from '@tabler/icons-react'
+import { IconSun, IconMoon, IconUser, IconCloud, IconSettings, IconLogout, IconLogin, IconFolder, IconHelp } from '@tabler/icons-react'
 import { useTheme } from '../context/ThemeContext'
 import { useSync } from '../context/SyncContext'
 import { useProjectContext } from '../context/ProjectContext'
@@ -9,6 +9,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import LoginModal from './LoginModal'
 import ProjectsModal from './ProjectsModal'
+import HelpModal from './HelpModal'
 
 export default function Header({ sidebarOpen, onToggleSidebar, mode, onModeChange }) {
   const { colorScheme, toggleColorScheme } = useTheme()
@@ -20,6 +21,7 @@ export default function Header({ sidebarOpen, onToggleSidebar, mode, onModeChang
   const [projectName, setProjectName] = useState('')
   const [showLoginModal, setShowLoginModal] = useState(false)
   const [showProjectsModal, setShowProjectsModal] = useState(false)
+  const [showHelpModal, setShowHelpModal] = useState(false)
 
   function handleDoubleClick() {
     if (project) {
@@ -133,6 +135,9 @@ export default function Header({ sidebarOpen, onToggleSidebar, mode, onModeChang
                 <Menu.Item leftSection={<IconSettings size={14} />} onClick={() => navigate('/settings')}>
                   Settings
                 </Menu.Item>
+                <Menu.Item leftSection={<IconHelp size={14} />} onClick={() => setShowHelpModal(true)}>
+                  Help
+                </Menu.Item>
                 <Menu.Divider />
                 <Menu.Item 
                   color="red" 
@@ -146,13 +151,19 @@ export default function Header({ sidebarOpen, onToggleSidebar, mode, onModeChang
                 </Menu.Item>
               </>
             ) : (
-              <Menu.Item leftSection={<IconLogin size={14} />} onClick={() => setShowLoginModal(true)}>
-                Sign in
-              </Menu.Item>
+              <>
+                <Menu.Item leftSection={<IconLogin size={14} />} onClick={() => setShowLoginModal(true)}>
+                  Sign in
+                </Menu.Item>
+                <Menu.Item leftSection={<IconHelp size={14} />} onClick={() => setShowHelpModal(true)}>
+                  Help
+                </Menu.Item>
+              </>
             )}
           </Menu.Dropdown>
         </Menu>
         <LoginModal opened={showLoginModal} onClose={() => setShowLoginModal(false)} />
+        <HelpModal opened={showHelpModal} onClose={() => setShowHelpModal(false)} />
       </Group>
     </Group>
   )
