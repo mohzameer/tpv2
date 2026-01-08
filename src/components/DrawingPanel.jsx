@@ -20,12 +20,64 @@ export default function DrawingPanel({ docId }) {
   const lastSavedContent = useRef(null)
   const { colorScheme } = useTheme()
   const { setIsSyncing } = useSync()
-  const { user } = useAuth()
+  const { user, loading: authLoading } = useAuth()
+  const loadCountRef = useRef(0)
+  const isLoadingRef = useRef(false)
+  const loadedDocIdRef = useRef(null)
+  const loadedUserIdRef = useRef(null)
+
+  // Log component lifecycle
+  useEffect(() => {
+    console.log('[DrawingPanel] Component mounted', { docId, userId: user?.id, authLoading })
+    return () => {
+      console.log('[DrawingPanel] Component unmounted', { docId })
+    }
+  }, [])
+
+  // Log user/auth changes
+  useEffect(() => {
+    console.log('[DrawingPanel] User/auth state changed', { 
+      userId: user?.id, 
+      userChanged: true,
+      authLoading 
+    })
+  }, [user, authLoading])
 
   useEffect(() => {
-    if (!docId) return
-    loadContent()
-  }, [docId, user]) // Reload when docId or user (auth state) changes
+    const userId = user?.id || null
+    console.log('[DrawingPanel] useEffect triggered', { 
+      docId, 
+      userId, 
+      authLoading,
+      hasDocId: !!docId,
+      isLoading: isLoadingRef.current,
+      loadedDocId: loadedDocIdRef.current,
+      loadedUserId: loadedUserIdRef.current,
+      timestamp: Date.now()
+    })
+    
+    if (!docId) {
+      console.log('[DrawingPanel] Skipping loadContent - no docId')
+      return
+    }
+    
+    // Skip if already loading
+    if (isLoadingRef.current) {
+      console.log('[DrawingPanel] Skipping loadContent - already loading')
+      return
+    }
+    
+    // Skip if already loaded for this docId and userId combination
+    if (loadedDocIdRef.current === docId && loadedUserIdRef.current === userId) {
+      console.log('[DrawingPanel] Skipping loadContent - already loaded for this docId/userId')
+      return
+    }
+    
+    loadCountRef.current += 1
+    const loadId = loadCountRef.current
+    console.log(`[DrawingPanel] Calling loadContent #${loadId}`)
+    loadContent(loadId)
+  }, [docId, user?.id]) // Use user?.id instead of user to avoid reloads on object reference changes
 
   useEffect(() => {
     // Cleanup viewport timeout on unmount
@@ -36,9 +88,16 @@ export default function DrawingPanel({ docId }) {
     }
   }, [])
 
-  async function loadContent() {
+  async function loadContent(loadId) {
+    isLoadingRef.current = true
+    const userId = user?.id || null
+    console.log(`[DrawingPanel] loadContent #${loadId} started`, { docId, userId, timestamp: Date.now() })
     try {
       const content = await getDocumentContent(docId)
+      console.log(`[DrawingPanel] loadContent #${loadId} - API response received`, { 
+        hasDrawingContent: !!(content?.drawing_content && Object.keys(content.drawing_content).length > 0)
+      })
+      
       if (content?.drawing_content && Object.keys(content.drawing_content).length > 0) {
         // Ensure appState has proper structure for backward compatibility
         const drawingContent = content.drawing_content
@@ -62,6 +121,7 @@ export default function DrawingPanel({ docId }) {
           zoom
         }
         
+        console.log(`[DrawingPanel] loadContent #${loadId} - Setting initialData (from saved content)`)
         setInitialData(drawingContent)
         lastSavedContent.current = JSON.stringify(drawingContent)
       } else {
@@ -72,17 +132,29 @@ export default function DrawingPanel({ docId }) {
           elements: [],
           appState: defaultViewport
         }
+        console.log(`[DrawingPanel] loadContent #${loadId} - Setting initialData (default/empty)`)
         setInitialData(defaultData)
         lastSavedContent.current = JSON.stringify(defaultData)
       }
+      
+      // Mark as loaded for this docId/userId combination
+      loadedDocIdRef.current = docId
+      loadedUserIdRef.current = userId
+      console.log(`[DrawingPanel] loadContent #${loadId} - Completed successfully`)
     } catch (err) {
-      console.error('Failed to load drawing:', err)
+      console.error(`[DrawingPanel] loadContent #${loadId} - Failed:`, err)
       const defaultViewport = { scrollX: 0, scrollY: 0, zoom: { value: 1.0, offsetX: 0, offsetY: 0 } }
       setViewportState(defaultViewport)
+      console.log(`[DrawingPanel] loadContent #${loadId} - Setting initialData (error fallback)`)
       setInitialData({
         elements: [],
         appState: defaultViewport
       })
+      // Still mark as loaded even on error to prevent retry loops
+      loadedDocIdRef.current = docId
+      loadedUserIdRef.current = userId
+    } finally {
+      isLoadingRef.current = false
     }
   }
 
@@ -173,7 +245,17 @@ export default function DrawingPanel({ docId }) {
     }
   }
 
+  // Log render state
+  useEffect(() => {
+    console.log('[DrawingPanel] Render state changed', { 
+      hasInitialData: !!initialData,
+      showingLoader: !initialData,
+      timestamp: Date.now()
+    })
+  }, [initialData])
+
   if (!initialData) {
+    console.log('[DrawingPanel] Rendering LOADER')
     return (
       <Center style={{ height: '100%' }}>
         <Loader size="md" />
@@ -181,10 +263,17 @@ export default function DrawingPanel({ docId }) {
     )
   }
 
+  const excalidrawKey = `${docId}-${user?.id || 'guest'}`
+  console.log('[DrawingPanel] Rendering EXCALIDRAW', { 
+    excalidrawKey,
+    hasInitialData: !!initialData,
+    timestamp: Date.now()
+  })
+
   return (
     <div style={{ height: '100%', width: '100%', position: 'relative' }}>
       <Excalidraw
-        key={`${docId}-${user?.id || 'guest'}`} // Force remount when docId or user changes
+        key={excalidrawKey} // Force remount when docId or user changes
         ref={excalidrawRef}
         initialData={{
           ...initialData,
