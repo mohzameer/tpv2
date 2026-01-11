@@ -10,6 +10,8 @@ export default function DocumentPage() {
   const { projectId, docId } = useParams()
   const { mode, setMode } = useOutletContext()
   const [layoutRatio, setLayoutRatio] = useState(50)
+  const [notesPanelSize, setNotesPanelSize] = useState(100) // Size when in notes mode
+  const [drawingPanelSize, setDrawingPanelSize] = useState(100) // Size when in drawing mode
   const [loaded, setLoaded] = useState(false)
   const saveTimeout = useRef(null)
   const docIdRef = useRef(docId)
@@ -96,10 +98,29 @@ export default function DocumentPage() {
   }, [docId, user, authLoading]) // Reload when docId, user (auth state), or authLoading changes
 
   const handleModeChangeFromHeader = useCallback((newMode) => {
-    setMode(newMode)
-    setLayoutRatio(50)
-    saveLayout(newMode, 50, docIdRef.current)
-  }, [setMode])
+    // Force save any pending changes before switching modes
+    // Dispatch event to trigger save in DrawingPanel and NotesPanel
+    window.dispatchEvent(new CustomEvent('forceSaveBeforeModeChange', { detail: { newMode } }))
+    
+    // Small delay to allow saves to complete, then save the mode change
+    setTimeout(() => {
+      const currentDocId = docIdRef.current
+      // Update mode first
+      setMode(newMode)
+      
+      // For 'both' mode, ensure layoutRatio is valid (between 20 and 80)
+      // For single-panel modes, we don't need to save layoutRatio
+      let ratioToSave = layoutRatio
+      if (newMode === 'both') {
+        // Ensure ratio is valid (between 20 and 80)
+        if (ratioToSave < 20) ratioToSave = 50
+        if (ratioToSave > 80) ratioToSave = 50
+      }
+      
+      saveLayout(newMode, ratioToSave, notesPanelSize, drawingPanelSize, currentDocId)
+      console.log('[DocumentPage] Saving mode change:', newMode, { ratio: ratioToSave })
+    }, 200)
+  }, [setMode, layoutRatio, notesPanelSize, drawingPanelSize])
 
   useEffect(() => {
     function handleHeaderModeChange(e) {
@@ -113,11 +134,33 @@ export default function DocumentPage() {
     setLoaded(false)
     try {
       const content = await getDocumentContent(docId)
+      console.log('[DocumentPage] Loading layout from database:', { 
+        layout_mode: content?.layout_mode,
+        layout_ratio: content?.layout_ratio 
+      })
+      
       if (content?.layout_mode) {
+        console.log('[DocumentPage] Setting mode to:', content.layout_mode)
         setMode(content.layout_mode)
+      } else {
+        console.log('[DocumentPage] No saved mode, using default')
       }
-      if (content?.layout_ratio) {
-        setLayoutRatio(content.layout_ratio)
+      
+      if (content?.layout_ratio !== undefined) {
+        // Ensure layout_ratio is valid (between 20 and 80)
+        let ratio = content.layout_ratio
+        if (ratio < 20 || ratio > 80) {
+          console.warn('[DocumentPage] Invalid layout_ratio:', ratio, 'resetting to 50')
+          ratio = 50
+        }
+        setLayoutRatio(ratio)
+      }
+      // Load saved panel sizes for each mode
+      if (content?.notes_panel_size !== undefined) {
+        setNotesPanelSize(content.notes_panel_size)
+      }
+      if (content?.drawing_panel_size !== undefined) {
+        setDrawingPanelSize(content.drawing_panel_size)
       }
     } catch (err) {
       console.error('[DocumentPage] loadLayout - Failed:', err)
@@ -127,26 +170,71 @@ export default function DocumentPage() {
   }
 
   function handleModeChange(newMode) {
+    console.log('[DocumentPage] handleModeChange called:', newMode)
     setMode(newMode)
-    setLayoutRatio(50) // Reset ratio when mode changes
-    saveLayout(newMode, 50, docIdRef.current)
+    // Don't reset ratio - keep the saved size for the mode
+    // For 'both' mode, ensure layoutRatio is valid
+    let ratioToSave = layoutRatio
+    if (newMode === 'both') {
+      if (ratioToSave < 20 || ratioToSave > 80) {
+        ratioToSave = 50
+      }
+    }
+    saveLayout(newMode, ratioToSave, notesPanelSize, drawingPanelSize, docIdRef.current)
   }
 
   function handleRatioChange(ratio) {
-    setLayoutRatio(ratio)
+    // Only update ratio if it's valid (between 20 and 80)
+    if (ratio >= 20 && ratio <= 80) {
+      setLayoutRatio(ratio)
+      if (saveTimeout.current) clearTimeout(saveTimeout.current)
+      const currentDocId = docIdRef.current
+      saveTimeout.current = setTimeout(() => {
+        // Only save if mode is 'both'
+        if (mode === 'both') {
+          saveLayout(mode, ratio, notesPanelSize, drawingPanelSize, currentDocId)
+        }
+      }, 500)
+    }
+  }
+
+  function handlePanelSizeChange(notesSize, drawingSize) {
+    setNotesPanelSize(notesSize)
+    setDrawingPanelSize(drawingSize)
     if (saveTimeout.current) clearTimeout(saveTimeout.current)
     const currentDocId = docIdRef.current
     saveTimeout.current = setTimeout(() => {
-      saveLayout(mode, ratio, currentDocId)
+      saveLayout(mode, layoutRatio, notesSize, drawingSize, currentDocId)
     }, 500)
   }
 
-  async function saveLayout(layoutMode, ratio, targetDocId) {
-    if (!targetDocId) return
+  async function saveLayout(layoutMode, ratio, notesSize, drawingSize, targetDocId) {
+    if (!targetDocId) {
+      console.warn('[DocumentPage] Cannot save layout: no docId')
+      return
+    }
     try {
-      await updateDocumentContent(targetDocId, { layout_mode: layoutMode, layout_ratio: ratio })
+      // Only save layout_ratio if mode is 'both' and ratio is valid (20-80)
+      // Don't save invalid ratios (like 0.1 from hidden panels)
+      const ratioToSave = (layoutMode === 'both' && ratio >= 20 && ratio <= 80) ? ratio : undefined
+      
+      console.log('[DocumentPage] Saving layout:', { layoutMode, ratio: ratioToSave, notesSize, drawingSize, targetDocId })
+      
+      const updates = { layout_mode: layoutMode }
+      if (ratioToSave !== undefined) {
+        updates.layout_ratio = ratioToSave
+      }
+      if (notesSize !== undefined) {
+        updates.notes_panel_size = notesSize
+      }
+      if (drawingSize !== undefined) {
+        updates.drawing_panel_size = drawingSize
+      }
+      
+      await updateDocumentContent(targetDocId, updates)
+      console.log('[DocumentPage] ✅ Layout saved successfully')
     } catch (err) {
-      console.error('Failed to save layout:', err)
+      console.error('[DocumentPage] ❌ Failed to save layout:', err)
     }
   }
 
@@ -163,6 +251,9 @@ export default function DocumentPage() {
       onModeChange={handleModeChange}
       layoutRatio={layoutRatio}
       onRatioChange={handleRatioChange}
+      notesPanelSize={notesPanelSize}
+      drawingPanelSize={drawingPanelSize}
+      onPanelSizeChange={handlePanelSizeChange}
       projectId={projectId} 
       docId={docId} 
     />
