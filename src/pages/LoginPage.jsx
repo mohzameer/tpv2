@@ -46,14 +46,11 @@ export default function LoginPage() {
           return
         }
         
-        console.log('LoginPage: Session ready, claimGuestProjects should have run')
-        
         // Wait a bit for claimGuestProjects to complete and projects to reload
         await new Promise(resolve => setTimeout(resolve, 300))
         
         // Get user's projects (should now include claimed guest projects)
         const projects = await getProjects()
-        console.log('LoginPage: Projects loaded (including claimed):', projects.length, projects.map(p => p.id))
         
         // Check if user was on a project/doc route before login (from localStorage)
         const LAST_VISITED_KEY = 'thinkpost_last_visited'
@@ -66,9 +63,8 @@ export default function LoginPage() {
             const data = JSON.parse(stored)
             guestProjectId = data.projectId || data.lastProjectId
             guestDocId = data.docId || data.lastDocId
-            console.log('LoginPage: Found guest project/doc in localStorage:', guestProjectId, guestDocId)
           } catch (e) {
-            console.log('LoginPage: Could not parse localStorage:', e)
+            // Ignore parse errors
           }
         }
         
@@ -76,7 +72,6 @@ export default function LoginPage() {
         if (guestProjectId && guestDocId) {
           const claimedProject = projects.find(p => p.id === guestProjectId)
           if (claimedProject) {
-            console.log('LoginPage: Found claimed guest project:', guestProjectId)
             const docs = await getDocuments(claimedProject.id)
             const doc = docs.find(d => {
               const docIdNum = typeof d.id === 'number' ? d.id : parseInt(d.id, 10)
@@ -85,11 +80,9 @@ export default function LoginPage() {
             })
             
             if (doc) {
-              console.log('LoginPage: Staying on claimed project/doc:', claimedProject.id, doc.id)
               navigate(`/${claimedProject.id}/${doc.id}`, { replace: true })
               return
             } else if (docs.length > 0) {
-              console.log('LoginPage: Guest doc not found, using first doc in claimed project')
               navigate(`/${claimedProject.id}/${docs[0].id}`, { replace: true })
               return
             }
@@ -98,7 +91,6 @@ export default function LoginPage() {
         
         // Priority 2: Get last visited from user profile (for returning users)
         const lastVisited = await getUserLastVisited()
-        console.log('LoginPage: Last visited from user profile:', lastVisited)
         
         if (lastVisited?.projectId && lastVisited?.docId && projects.length > 0) {
           const project = projects.find(p => p.id === lastVisited.projectId)
@@ -111,11 +103,9 @@ export default function LoginPage() {
             })
             
             if (doc) {
-              console.log('LoginPage: Navigating to last visited from profile:', project.id, doc.id)
               navigate(`/${project.id}/${doc.id}`, { replace: true })
               return
             } else if (docs.length > 0) {
-              console.log('LoginPage: Last doc not found, using first doc in project')
               navigate(`/${project.id}/${docs[0].id}`, { replace: true })
               return
             }
@@ -127,17 +117,12 @@ export default function LoginPage() {
           const firstProject = projects[0]
           const docs = await getDocuments(firstProject.id)
           if (docs.length > 0) {
-            console.log('LoginPage: Navigating to first project/doc:', firstProject.id, docs[0].id)
             navigate(`/${firstProject.id}/${docs[0].id}`, { replace: true })
             return
           }
-          console.log('LoginPage: Navigating to project:', firstProject.id)
           navigate(`/${firstProject.id}`, { replace: true })
           return
         }
-        
-        // Should never happen, but just in case
-        console.log('LoginPage: No projects found, staying on login page')
       }
     } catch (err) {
       setError(err.message)
