@@ -5,7 +5,7 @@ import { useCreateBlockNote } from '@blocknote/react'
 import { BlockNoteView } from '@blocknote/mantine'
 import '@blocknote/mantine/style.css'
 import './NotesPanel.css'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { getDocumentContent, updateDocumentContent } from '../lib/api'
 import { useTheme } from '../context/ThemeContext'
 import { useSync } from '../context/SyncContext'
@@ -159,133 +159,289 @@ async function markdownToBlocksPreservingEmpty(editor, markdown) {
   return resultBlocks.length > 0 ? resultBlocks : [{ type: 'paragraph', content: '' }]
 }
 
-// Hook to track block selection
-function useBlockSelection(editor) {
-  const [state, setState] = useState(null)
+// Hook to track hovered block globally (single listener, throttled with RAF)
+function useHoveredBlockId() {
+  const [blockElement, setBlockElement] = useState(null)
+
+  useEffect(() => {
+    let raf = null
+
+    const onMouseMove = (e) => {
+      if (raf) return
+
+      raf = requestAnimationFrame(() => {
+        raf = null
+
+        const target = e.target
+        if (!target) {
+          setBlockElement(null)
+          return
+        }
+
+        // Walk up the DOM to find code block container
+        let element = target
+        if (element.nodeType === Node.TEXT_NODE) {
+          element = element.parentElement
+        }
+        
+        let codeBlockEl = null
+        
+        while (element) {
+          const nodeType = element.getAttribute?.('data-node-type')
+          const className = element.className || ''
+          
+          // Check if it's a code block
+          if (nodeType === 'codeBlock') {
+            codeBlockEl = element
+            break
+          }
+          
+          // Also check for PRE tags (code blocks are rendered as PRE)
+          if (element.tagName === 'PRE' && element.closest('.bn-editor')) {
+            codeBlockEl = element
+            break
+          }
+          
+          // Check for CODE inside PRE
+          if (element.tagName === 'CODE') {
+            const pre = element.closest('pre')
+            if (pre && pre.closest('.bn-editor')) {
+              codeBlockEl = pre
+              break
+            }
+          }
+          
+          // Stop if we've reached the editor root
+          if (element.classList?.contains('bn-editor') || 
+              element.hasAttribute?.('data-blocknote-editor')) {
+            break
+          }
+          
+          element = element.parentElement
+        }
+
+        setBlockElement(codeBlockEl)
+      })
+    }
+
+    const onMouseLeave = (e) => {
+      // Clear hover when mouse leaves the editor area
+      if (!e.relatedTarget || !e.relatedTarget.closest?.('.bn-editor')) {
+        setBlockElement(null)
+      }
+    }
+
+    document.addEventListener('mousemove', onMouseMove)
+    document.addEventListener('mouseleave', onMouseLeave, true)
+    
+    return () => {
+      document.removeEventListener('mousemove', onMouseMove)
+      document.removeEventListener('mouseleave', onMouseLeave, true)
+      if (raf) {
+        cancelAnimationFrame(raf)
+      }
+    }
+  }, [])
+
+  return blockElement
+}
+
+// Helper to normalize text for comparison (more lenient)
+function normalizeText(text) {
+  return text
+    .replace(/\s+/g, ' ')  // Normalize all whitespace to single spaces
+    .trim()
+}
+
+// Helper to find block ID from DOM element by matching content with editor blocks
+function findBlockIdFromElement(blockElement, editor) {
+  if (!blockElement || !editor) return null
+  
+  // Get text content from the DOM element
+  const domText = normalizeText(blockElement.textContent || '')
+  
+  // Find matching block in editor by comparing content
+  const codeBlocks = editor.document.filter(b => b.type === 'codeBlock')
+  
+  // Try exact match first
+  for (const block of codeBlocks) {
+    const blockText = normalizeText(getCodeBlockPlainText(block))
+    if (blockText === domText) {
+      return block.id
+    }
+  }
+  
+  // If no exact match, try to find by position in DOM
+  // Get all code blocks in DOM in order
+  const editorEl = document.querySelector('.bn-editor')
+  if (editorEl) {
+    const domCodeBlocks = Array.from(editorEl.querySelectorAll('[data-node-type="codeBlock"], pre'))
+    const blockIndex = domCodeBlocks.indexOf(blockElement)
+    if (blockIndex >= 0 && blockIndex < codeBlocks.length) {
+      return codeBlocks[blockIndex].id
+    }
+  }
+  
+  return null
+}
+
+// Hook to get selected block from editor
+function useSelectedBlock(editor) {
+  const [selectedBlock, setSelectedBlock] = useState(null)
 
   useEffect(() => {
     if (!editor) return
 
-    const updateState = () => {
-      // Try to get selection first
+    const updateSelection = () => {
       const selection = editor.getSelection()
       let block = null
       
       if (selection && selection.blocks && selection.blocks.length > 0) {
-        // Use the first selected block
         block = selection.blocks[0]
       } else {
-        // If no selection, get block at cursor position
         const cursorPosition = editor.getTextCursorPosition()
         if (cursorPosition) {
           block = cursorPosition.block
         }
       }
-
-      if (!block) {
-        setState(null)
-        return
-      }
-
-      // Find the block's DOM element by traversing from selection/cursor
-      let blockRect = null
-      try {
-        const domSelection = window.getSelection()
-        let startElement = null
-        
-        if (domSelection && domSelection.rangeCount > 0) {
-          const range = domSelection.getRangeAt(0)
-          startElement = range.commonAncestorContainer
-        } else {
-          // No selection, try to find active element (cursor position)
-          const activeElement = document.activeElement
-          if (activeElement) {
-            startElement = activeElement
-          }
-        }
-        
-        if (startElement) {
-          let element = startElement
-          
-          // If it's a text node, get the parent element
-          if (element.nodeType === Node.TEXT_NODE) {
-            element = element.parentElement
-          }
-          
-          // Walk up the DOM tree to find the code block container
-          while (element) {
-            // Check for BlockNote code block indicators
-            const nodeType = element.getAttribute?.('data-node-type')
-            const className = element.className || ''
-            
-            if (nodeType === 'codeBlock' || 
-                className.includes('codeBlock') ||
-                element.tagName === 'PRE' ||
-                (element.tagName === 'CODE' && element.closest('pre'))) {
-              // Found the code block container
-              const codeBlockContainer = element.tagName === 'CODE' ? element.closest('pre') || element.parentElement : element
-              if (codeBlockContainer) {
-                blockRect = codeBlockContainer.getBoundingClientRect()
-                break
-              }
-            }
-            
-            // Stop if we've reached the editor root
-            if (element.classList?.contains('bn-editor') || 
-                element.hasAttribute?.('data-blocknote-editor')) {
-              break
-            }
-            
-            element = element.parentElement
-          }
-        }
-      } catch (err) {
-        console.debug('Could not find block DOM element:', err)
-      }
-
-      setState({
-        block,
-        blockRect,
-      })
+      
+      setSelectedBlock(block)
     }
 
-    const unsubscribe = editor.onSelectionChange(updateState)
-    
-    // Also update on scroll/resize to keep button position correct
-    const handleScroll = () => updateState()
-    const handleResize = () => updateState()
+    const unsubscribe = editor.onSelectionChange(updateSelection)
+    updateSelection()
+
+    return () => {
+      unsubscribe()
+    }
+  }, [editor])
+
+  return selectedBlock
+}
+
+// Floating copy button component (only for code blocks) - hover-based
+function FloatingCopyButton({ editor }) {
+  const hoveredBlockElement = useHoveredBlockId()
+  const selectedBlock = useSelectedBlock(editor)
+  const [blockRect, setBlockRect] = useState(null)
+  const [opacity, setOpacity] = useState(0)
+
+  // Determine which code block element to show toolbar for
+  // Selection takes priority over hover
+  const { activeElement, activeBlock } = useMemo(() => {
+    let element = null
+    let block = null
+
+    if (selectedBlock && selectedBlock.type === 'codeBlock') {
+      // Try to find the selected block's DOM element
+      const editorEl = document.querySelector('.bn-editor')
+      if (editorEl) {
+        const codeBlocks = Array.from(editorEl.querySelectorAll('[data-node-type="codeBlock"], pre'))
+        const allCodeBlocks = editor?.document?.filter(b => b.type === 'codeBlock') || []
+        const blockIndex = allCodeBlocks.findIndex(b => b.id === selectedBlock.id)
+        
+        if (blockIndex >= 0 && blockIndex < codeBlocks.length) {
+          element = codeBlocks[blockIndex]
+          block = selectedBlock
+        }
+      }
+    } else if (hoveredBlockElement) {
+      // Use hovered element directly - no need to match to editor block
+      element = hoveredBlockElement
+      // Try to find the block from editor, but don't require it
+      if (editor) {
+        const blockId = findBlockIdFromElement(hoveredBlockElement, editor)
+        if (blockId) {
+          block = editor.document.find(b => b.id === blockId)
+        }
+      }
+    }
+
+    return { activeElement: element, activeBlock: block }
+  }, [selectedBlock, hoveredBlockElement, editor])
+
+  // Update rect and opacity
+  useEffect(() => {
+    if (!activeElement) {
+      setBlockRect(null)
+      setOpacity(0)
+      return
+    }
+
+    const updateRect = () => {
+      const rect = activeElement.getBoundingClientRect()
+      if (rect) {
+        setBlockRect(rect)
+        setOpacity(1)
+      } else {
+        setBlockRect(null)
+        setOpacity(0)
+      }
+    }
+
+    updateRect()
+
+    // Update on scroll/resize
+    const handleScroll = () => updateRect()
+    const handleResize = () => updateRect()
     
     window.addEventListener('scroll', handleScroll, true)
     window.addEventListener('resize', handleResize)
     
-    // Initial update
-    updateState()
-
     return () => {
-      unsubscribe()
       window.removeEventListener('scroll', handleScroll, true)
       window.removeEventListener('resize', handleResize)
     }
-  }, [editor])
+  }, [activeElement])
 
-  return state
-}
+  // Hide toolbar when editor loses focus and no hover (UX polish)
+  useEffect(() => {
+    if (!editor || !activeElement) return
+    
+    // If we have a selected block, always show (selection takes priority)
+    if (selectedBlock && selectedBlock.type === 'codeBlock' && selectedBlock.id === activeBlock?.id) {
+      return
+    }
+    
+    const checkFocus = () => {
+      const isFocused = editor.isFocused?.() ?? document.activeElement?.closest('.bn-editor') !== null
+      if (!isFocused && !hoveredBlockElement) {
+        setOpacity(0)
+      } else if ((isFocused || hoveredBlockElement) && blockRect) {
+        // Restore opacity if we have focus or hover
+        setOpacity(1)
+      }
+    }
 
-// Floating copy button component (only for code blocks)
-function FloatingCopyButton({ editor }) {
-  const selection = useBlockSelection(editor)
+    const handleFocus = () => {
+      setTimeout(checkFocus, 50)
+    }
+    const handleBlur = () => {
+      setTimeout(checkFocus, 150)
+    }
 
-  // Only show for code blocks
-  if (!selection?.block || selection.block.type !== 'codeBlock') return null
+    document.addEventListener('focusin', handleFocus)
+    document.addEventListener('focusout', handleBlur)
+    
+    return () => {
+      document.removeEventListener('focusin', handleFocus)
+      document.removeEventListener('focusout', handleBlur)
+    }
+  }, [editor, hoveredBlockElement, activeElement, selectedBlock, activeBlock, blockRect])
 
-  // Only show if we have the block's DOM position
-  if (!selection.blockRect) return null
+  if (!activeElement || !blockRect) return null
+
+  const toolbarStyle = {
+    position: 'fixed',
+    top: blockRect.top + 4,
+    left: blockRect.right - 28,
+    zIndex: 1000,
+    opacity,
+    transition: 'opacity 120ms ease',
+    pointerEvents: opacity > 0 ? 'auto' : 'none',
+  }
 
   const buttonStyle = {
-    position: 'fixed',
-    top: selection.blockRect.top + window.scrollY + 4,
-    left: selection.blockRect.right + window.scrollX - 28,
-    zIndex: 1000,
     width: '24px',
     height: '24px',
     padding: 0,
@@ -301,8 +457,14 @@ function FloatingCopyButton({ editor }) {
 
   const handleCopy = async () => {
     try {
-      // Get plain text from the code block
-      let text = getCodeBlockPlainText(selection.block)
+      // Get text directly from the DOM element - more reliable than matching to editor block
+      let text = activeElement.textContent || ''
+      
+      // Fallback to editor block if available
+      if (!text.trim() && activeBlock) {
+        text = getCodeBlockPlainText(activeBlock)
+      }
+      
       if (!text.trim()) {
         console.warn('No text to copy from code block')
         return
@@ -321,14 +483,18 @@ function FloatingCopyButton({ editor }) {
   }
 
   return (
-    <button
-      style={buttonStyle}
-      onMouseDown={(e) => e.preventDefault()}
-      onClick={handleCopy}
-      title="Copy code"
+    <div
+      style={toolbarStyle}
+      onMouseDown={(e) => e.preventDefault()} // critical - prevents selection collapse
     >
-      <IconCopy size={14} />
-    </button>
+      <button
+        style={buttonStyle}
+        onClick={handleCopy}
+        title="Copy code"
+      >
+        <IconCopy size={14} />
+      </button>
+    </div>
   )
 }
 
