@@ -276,7 +276,7 @@ export async function getDocumentContent(documentId) {
   return data
 }
 
-export async function updateDocumentContent(documentId, { notes_content, drawing_content, layout_mode, layout_ratio, text_mode, notes_panel_size, drawing_panel_size }) {
+export async function updateDocumentContent(documentId, { notes_content, drawing_content, layout_mode, layout_ratio, text_mode, notes_panel_size, drawing_panel_size, drawing_files }) {
   const updates = {}
   if (notes_content !== undefined) updates.notes_content = notes_content
   if (drawing_content !== undefined) updates.drawing_content = drawing_content
@@ -285,6 +285,7 @@ export async function updateDocumentContent(documentId, { notes_content, drawing
   if (text_mode !== undefined) updates.text_mode = text_mode
   if (notes_panel_size !== undefined) updates.notes_panel_size = notes_panel_size
   if (drawing_panel_size !== undefined) updates.drawing_panel_size = drawing_panel_size
+  if (drawing_files !== undefined) updates.drawing_files = drawing_files
   
   const { data, error } = await supabase
     .from('document_contents')
