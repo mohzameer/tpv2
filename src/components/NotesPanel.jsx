@@ -431,9 +431,19 @@ function FloatingCopyButton({ editor }) {
 
   if (!activeElement || !blockRect) return null
 
+  // Header height is 50px - avoid overlapping with header
+  const HEADER_HEIGHT = 50
+  const buttonTop = blockRect.top + 4
+  
+  // If button would overlap with header, position it just below the header
+  // Otherwise, keep it relative to the code block
+  const finalTop = buttonTop < HEADER_HEIGHT 
+    ? HEADER_HEIGHT + 8  // Position just below header
+    : buttonTop
+
   const toolbarStyle = {
     position: 'fixed',
-    top: blockRect.top + 4,
+    top: finalTop,
     left: blockRect.right - 28,
     zIndex: 1000,
     opacity,
@@ -622,7 +632,7 @@ export default function NotesPanel({ docId }) {
 
   return (
     <Box style={{ display: 'flex', flexDirection: 'column', height: '100%', position: 'relative' }}>
-      <Box style={{ position: 'absolute', top: 8, right: 8, zIndex: 10 }}>
+      <Box style={{ position: 'absolute', top: 8, right: 8, zIndex: 1001 }}>
         <SegmentedControl
           size="xs"
           value={textMode}
@@ -633,7 +643,21 @@ export default function NotesPanel({ docId }) {
           ]}
         />
       </Box>
-      <Box style={{ flex: 1, overflow: 'auto', paddingTop: 40, paddingBottom: 400 }}>
+      <Box 
+        style={{ 
+          flex: 1, 
+          overflow: 'auto', 
+          paddingTop: 40, 
+          paddingBottom: 400,
+          scrollbarWidth: 'none', /* Firefox */
+          msOverflowStyle: 'none', /* IE and Edge */
+        }}
+        sx={{
+          '&::-webkit-scrollbar': {
+            display: 'none', /* Chrome, Safari, Opera */
+          },
+        }}
+      >
         {textMode === 'text' ? (
           <>
             <BlockNoteView editor={editor} theme={colorScheme} onChange={handleChange} />
