@@ -162,6 +162,7 @@ async function markdownToBlocksPreservingEmpty(editor, markdown) {
 // Hook to track hovered block globally (single listener, throttled with RAF)
 function useHoveredBlockId() {
   const [blockElement, setBlockElement] = useState(null)
+  const clearTimeoutRef = useRef(null)
 
   useEffect(() => {
     let raf = null
@@ -169,12 +170,28 @@ function useHoveredBlockId() {
     const onMouseMove = (e) => {
       if (raf) return
 
+      // Clear any pending timeout
+      if (clearTimeoutRef.current) {
+        clearTimeout(clearTimeoutRef.current)
+        clearTimeoutRef.current = null
+      }
+
       raf = requestAnimationFrame(() => {
         raf = null
 
         const target = e.target
         if (!target) {
-          setBlockElement(null)
+          // Small delay before clearing to prevent flicker when moving to button
+          clearTimeoutRef.current = setTimeout(() => {
+            setBlockElement(null)
+          }, 100)
+          return
+        }
+
+        // Check if hovering over the copy button - if so, keep the current block
+        const isOverButton = target.closest('[data-copy-button]') !== null
+        if (isOverButton && blockElement) {
+          // Keep the current block when hovering over the button
           return
         }
 
@@ -226,8 +243,11 @@ function useHoveredBlockId() {
 
     const onMouseLeave = (e) => {
       // Clear hover when mouse leaves the editor area
+      // But add a small delay to allow moving to the button
       if (!e.relatedTarget || !e.relatedTarget.closest?.('.bn-editor')) {
-        setBlockElement(null)
+        clearTimeoutRef.current = setTimeout(() => {
+          setBlockElement(null)
+        }, 150)
       }
     }
 
@@ -240,8 +260,11 @@ function useHoveredBlockId() {
       if (raf) {
         cancelAnimationFrame(raf)
       }
+      if (clearTimeoutRef.current) {
+        clearTimeout(clearTimeoutRef.current)
+      }
     }
-  }, [])
+  }, [blockElement])
 
   return blockElement
 }
@@ -496,11 +519,16 @@ function FloatingCopyButton({ editor }) {
     <div
       style={toolbarStyle}
       onMouseDown={(e) => e.preventDefault()} // critical - prevents selection collapse
+      data-copy-button // Marker for hover detection
+      onMouseEnter={() => {
+        // Keep hover state when mouse enters button area
+      }}
     >
       <button
         style={buttonStyle}
         onClick={handleCopy}
         title="Copy code"
+        data-copy-button
       >
         <IconCopy size={14} />
       </button>
