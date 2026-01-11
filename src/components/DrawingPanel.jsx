@@ -70,7 +70,6 @@ export default function DrawingPanel({ docId }) {
         const appState = excalidrawAPIRef.current.getAppState()
         
         if (elements) {
-          console.log('[DrawingPanel] Force saving before mode change', { elementsCount: elements.length })
           // Clear any pending timeout and save immediately
           if (saveTimeout.current) {
             clearTimeout(saveTimeout.current)
@@ -83,7 +82,7 @@ export default function DrawingPanel({ docId }) {
           try {
             files = excalidrawAPIRef.current.getFiles()
           } catch (err) {
-            console.warn('Failed to get files in force save:', err)
+            // Failed to get files in force save
           }
           
           const newContent = {
@@ -106,12 +105,10 @@ export default function DrawingPanel({ docId }) {
               drawing_files: files  // Save files separately
             })
             lastSavedContent.current = contentString
-            console.log('[DrawingPanel] ✅ Force save completed')
             setIsSyncing(false)
           }
         }
       } catch (err) {
-        console.warn('[DrawingPanel] Error in force save:', err)
         setIsSyncing(false)
       }
     }
@@ -156,14 +153,12 @@ export default function DrawingPanel({ docId }) {
             dataURL = `data:${normalizedFile.mimeType};base64,${dataURL}`
             normalizedFile.dataURL = dataURL
           } else {
-            console.warn(`[DrawingPanel] Invalid dataURL format for file ${fileId}, skipping`)
             continue
           }
         }
         
         // Validate dataURL is not empty and has valid format
         if (dataURL.length < 50) {
-          console.warn(`[DrawingPanel] dataURL too short for file ${fileId}, skipping`)
           continue
         }
         
@@ -172,7 +167,6 @@ export default function DrawingPanel({ docId }) {
           // Verify it has the format: data:mimeType;base64,base64data
           const parts = dataURL.split(',')
           if (parts.length !== 2) {
-            console.warn(`[DrawingPanel] Malformed dataURL for file ${fileId}, fixing...`)
             // Try to fix: if it's missing the comma, add it
             if (!dataURL.includes(',')) {
               const base64Match = dataURL.match(/base64(.+)$/)
@@ -180,7 +174,6 @@ export default function DrawingPanel({ docId }) {
                 dataURL = `data:${normalizedFile.mimeType};base64,${base64Match[1]}`
                 normalizedFile.dataURL = dataURL
               } else {
-                console.warn(`[DrawingPanel] Cannot fix dataURL for file ${fileId}, skipping`)
                 continue
               }
             }
@@ -188,12 +181,9 @@ export default function DrawingPanel({ docId }) {
         }
         
         normalized[fileId] = normalizedFile
-      } else {
-        console.warn(`[DrawingPanel] Missing dataURL for file ${fileId}, skipping`)
       }
     }
     
-    console.log(`[DrawingPanel] Normalized ${Object.keys(normalized).length} files from ${Object.keys(files).length} total`)
     return normalized
   }
 
@@ -220,24 +210,8 @@ export default function DrawingPanel({ docId }) {
         // Normalize and validate merged files
         const normalizedFiles = normalizeFiles(mergedFiles)
         
-        // Log recovery information
-        const recoveredFiles = Object.keys(filesFromColumn).filter(id => !filesFromContent[id])
-        if (recoveredFiles.length > 0) {
-          console.log(`[DrawingPanel] Recovered ${recoveredFiles.length} files from drawing_files column:`, recoveredFiles)
-        }
-        
         // Set normalized files back to drawingContent
         drawingContent.files = normalizedFiles
-        
-        // Log image elements and their fileIds for debugging
-        const imageElements = drawingContent.elements?.filter(e => e.type === 'image') || []
-        console.log(`[DrawingPanel] Found ${imageElements.length} image elements`)
-        imageElements.forEach((el, idx) => {
-          const fileId = el.fileId
-          const hasFile = fileId && normalizedFiles[fileId]
-          const source = hasFile ? (filesFromContent[fileId] ? 'drawing_content' : 'drawing_files') : 'none'
-          console.log(`[DrawingPanel] Image ${idx}: fileId=${fileId}, hasFile=${!!hasFile}, source=${source}, fileDataURL length=${hasFile ? normalizedFiles[fileId].dataURL?.length : 0}`)
-        })
         
         // Set defaults for missing viewport properties
         const scrollX = drawingContent.appState.scrollX ?? 0
@@ -276,7 +250,6 @@ export default function DrawingPanel({ docId }) {
       // Reset files verification flag when loading new content
       filesVerifiedRef.current = false
     } catch (err) {
-      console.error(`[DrawingPanel] loadContent #${loadId} - Failed:`, err)
       const defaultViewport = { scrollX: 0, scrollY: 0, zoom: { value: 1.0, offsetX: 0, offsetY: 0 } }
       setViewportState(defaultViewport)
       setInitialData({
@@ -321,19 +294,6 @@ export default function DrawingPanel({ docId }) {
           }
           
           if (Object.keys(filesToLoad).length > 0) {
-            console.log(`[DrawingPanel] Loading ${Object.keys(filesToLoad).length} files via updateScene`)
-            console.log('[DrawingPanel] File IDs to load:', Object.keys(filesToLoad))
-            
-            // Log file details for debugging
-            Object.entries(filesToLoad).forEach(([fileId, file]) => {
-              console.log(`[DrawingPanel] File ${fileId}:`, {
-                hasDataURL: !!file.dataURL,
-                dataURLLength: file.dataURL?.length,
-                mimeType: file.mimeType,
-                dataURLStart: file.dataURL?.substring(0, 50)
-              })
-            })
-            
             // Merge all files (current + new) to ensure we don't lose any
             const allFiles = {
               ...currentFiles,
@@ -354,8 +314,6 @@ export default function DrawingPanel({ docId }) {
               const missingFiles = Object.keys(filesToLoad).filter(id => !verifyFiles[id] || !verifyFiles[id].dataURL)
               
               if (missingFiles.length > 0) {
-                console.warn(`[DrawingPanel] ${missingFiles.length} files failed to load, retrying...`, missingFiles)
-                
                 // Retry loading missing files
                 const retryFiles = {}
                 missingFiles.forEach(id => {
@@ -373,25 +331,19 @@ export default function DrawingPanel({ docId }) {
                         ...retryFiles
                       }
                     })
-                    console.log('[DrawingPanel] Retried loading files')
                   }, 500)
                 }
-              } else {
-                console.log(`[DrawingPanel] ✅ All ${Object.keys(filesToLoad).length} files loaded successfully`)
               }
             }, 500)
-          } else if (imageElements.length > 0) {
-            console.log(`[DrawingPanel] All ${imageElements.length} image files are already loaded`)
           }
         } catch (err) {
-          console.warn('[DrawingPanel] Error loading files via API:', err)
+          // Error loading files via API
         }
       }, 1000) // Delay to ensure Excalidraw is fully ready
     }
   }
 
   function handleChange(elements, appState) {
-    console.log('[DrawingPanel] onChange triggered', { elementsCount: elements.length })
     if (saveTimeout.current) clearTimeout(saveTimeout.current)
     saveTimeout.current = setTimeout(() => {
       saveContent(elements, appState)
@@ -445,7 +397,7 @@ export default function DrawingPanel({ docId }) {
         try {
           files = excalidrawAPIRef.current.getFiles() || files
         } catch (err) {
-          console.warn('Failed to get files in saveViewportState:', err)
+          // Failed to get files in saveViewportState
         }
       }
       setIsSyncing(true)
@@ -456,7 +408,7 @@ export default function DrawingPanel({ docId }) {
       })
       lastSavedContent.current = contentString
     } catch (err) {
-      console.error('Failed to save viewport state:', err)
+      // Failed to save viewport state
     } finally {
       setIsSyncing(false)
     }
@@ -464,11 +416,8 @@ export default function DrawingPanel({ docId }) {
 
   async function saveContent(elements, appState) {
     if (!docId) {
-      console.warn('[DrawingPanel] Cannot save: no docId')
       return
     }
-    
-    console.log('[DrawingPanel] saveContent called', { elementsCount: elements.length, docId })
     
     // Get current viewport state from local state
     const currentViewport = viewportState
@@ -479,7 +428,7 @@ export default function DrawingPanel({ docId }) {
       try {
         files = excalidrawAPIRef.current.getFiles()
       } catch (err) {
-        console.warn('Failed to get files from Excalidraw API:', err)
+        // Failed to get files from Excalidraw API
       }
     }
     
@@ -497,13 +446,10 @@ export default function DrawingPanel({ docId }) {
     
     const currentContent = JSON.stringify(newContent)
     if (currentContent === lastSavedContent.current) {
-      console.log('[DrawingPanel] No changes to save')
       return
     }
     
     try {
-      console.log('[DrawingPanel] Saving to database...')
-      console.log(`[DrawingPanel] Saving ${Object.keys(files).length} files to both drawing_content.files and drawing_files column`)
       setIsSyncing(true)
       
       // Save files to BOTH places:
@@ -515,9 +461,8 @@ export default function DrawingPanel({ docId }) {
       })
       
       lastSavedContent.current = currentContent
-      console.log('[DrawingPanel] ✅ Successfully saved!')
     } catch (err) {
-      console.error('[DrawingPanel] ❌ Failed to save drawing:', err)
+      // Failed to save drawing
     } finally {
       setIsSyncing(false)
     }
