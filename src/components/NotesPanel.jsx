@@ -164,11 +164,25 @@ function useHoveredBlockId() {
   const [blockElement, setBlockElement] = useState(null)
   const clearTimeoutRef = useRef(null)
 
+  // Check if editor is visible
+  const isEditorVisible = () => {
+    const editorEl = document.querySelector('.bn-editor')
+    if (!editorEl) return false
+    const rect = editorEl.getBoundingClientRect()
+    return rect.width > 0 && rect.height > 0
+  }
+
   useEffect(() => {
     let raf = null
 
     const onMouseMove = (e) => {
       if (raf) return
+
+      // If editor is not visible, clear hover state
+      if (!isEditorVisible()) {
+        setBlockElement(null)
+        return
+      }
 
       // Clear any pending timeout
       if (clearTimeoutRef.current) {
@@ -254,9 +268,17 @@ function useHoveredBlockId() {
     document.addEventListener('mousemove', onMouseMove)
     document.addEventListener('mouseleave', onMouseLeave, true)
     
+    // Check visibility periodically and clear hover if panel is hidden
+    const visibilityCheck = setInterval(() => {
+      if (!isEditorVisible() && blockElement) {
+        setBlockElement(null)
+      }
+    }, 200)
+    
     return () => {
       document.removeEventListener('mousemove', onMouseMove)
       document.removeEventListener('mouseleave', onMouseLeave, true)
+      clearInterval(visibilityCheck)
       if (raf) {
         cancelAnimationFrame(raf)
       }
@@ -348,6 +370,7 @@ function FloatingCopyButton({ editor }) {
   const selectedBlock = useSelectedBlock(editor)
   const [blockRect, setBlockRect] = useState(null)
   const [opacity, setOpacity] = useState(0)
+  const [isPanelVisible, setIsPanelVisible] = useState(true)
 
   // Determine which code block element to show toolbar for
   // Selection takes priority over hover
@@ -383,9 +406,61 @@ function FloatingCopyButton({ editor }) {
     return { activeElement: element, activeBlock: block }
   }, [selectedBlock, hoveredBlockElement, editor])
 
+  // Check if panel is visible (has non-zero width)
+  useEffect(() => {
+    const checkVisibility = () => {
+      const editorEl = document.querySelector('.bn-editor')
+      if (editorEl) {
+        const rect = editorEl.getBoundingClientRect()
+        const visible = rect.width > 0 && rect.height > 0
+        setIsPanelVisible(visible)
+        // If panel becomes hidden, clear the hover state
+        if (!visible) {
+          setBlockRect(null)
+          setOpacity(0)
+        }
+      } else {
+        setIsPanelVisible(false)
+        setBlockRect(null)
+        setOpacity(0)
+      }
+    }
+
+    checkVisibility()
+
+    // Check visibility on resize and when mode changes
+    const handleResize = () => {
+      checkVisibility()
+    }
+    
+    // Use ResizeObserver to detect when panel size changes
+    const editorEl = document.querySelector('.bn-editor')
+    let resizeObserver = null
+    
+    if (editorEl && window.ResizeObserver) {
+      resizeObserver = new ResizeObserver(() => {
+        checkVisibility()
+      })
+      resizeObserver.observe(editorEl)
+    }
+    
+    window.addEventListener('resize', handleResize)
+    
+    // Also check periodically in case ResizeObserver isn't available
+    const interval = setInterval(checkVisibility, 200)
+    
+    return () => {
+      window.removeEventListener('resize', handleResize)
+      if (resizeObserver && editorEl) {
+        resizeObserver.unobserve(editorEl)
+      }
+      clearInterval(interval)
+    }
+  }, [])
+
   // Update rect and opacity
   useEffect(() => {
-    if (!activeElement) {
+    if (!activeElement || !isPanelVisible) {
       setBlockRect(null)
       setOpacity(0)
       return
@@ -393,7 +468,7 @@ function FloatingCopyButton({ editor }) {
 
     const updateRect = () => {
       const rect = activeElement.getBoundingClientRect()
-      if (rect) {
+      if (rect && rect.width > 0 && rect.height > 0) {
         setBlockRect(rect)
         setOpacity(1)
       } else {
@@ -415,7 +490,7 @@ function FloatingCopyButton({ editor }) {
       window.removeEventListener('scroll', handleScroll, true)
       window.removeEventListener('resize', handleResize)
     }
-  }, [activeElement])
+  }, [activeElement, isPanelVisible])
 
   // Hide toolbar when editor loses focus and no hover (UX polish)
   useEffect(() => {
@@ -452,7 +527,7 @@ function FloatingCopyButton({ editor }) {
     }
   }, [editor, hoveredBlockElement, activeElement, selectedBlock, activeBlock, blockRect])
 
-  if (!activeElement || !blockRect) return null
+  if (!activeElement || !blockRect || !isPanelVisible) return null
 
   // Header height is 50px - avoid overlapping with header
   const HEADER_HEIGHT = 50
