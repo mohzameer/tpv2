@@ -4,25 +4,15 @@ import NotesPanel from './NotesPanel'
 import DrawingPanel from './DrawingPanel'
 
 export default function WorkspacePanel({ mode, layoutRatio, onRatioChange, projectId, docId }) {
-  useEffect(() => {
-    console.log('[WorkspacePanel] Component mounted/updated', { mode, docId, timestamp: Date.now() })
-    return () => {
-      console.log('[WorkspacePanel] Component unmounted', { mode, docId })
-    }
-  }, [mode, docId])
-
   if (mode === 'notes') {
-    console.log('[WorkspacePanel] Rendering NotesPanel only')
     return <NotesPanel key={docId} docId={docId} />
   }
 
   if (mode === 'drawing') {
-    console.log('[WorkspacePanel] Rendering DrawingPanel only')
     return <DrawingPanel key={docId} docId={docId} />
   }
 
   // Both mode - resizable split
-  console.log('[WorkspacePanel] Rendering both panels (split mode)')
   return (
     <PanelGroup 
       direction="horizontal" 

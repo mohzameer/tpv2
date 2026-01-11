@@ -46,7 +46,6 @@ export function AuthProvider({ children }) {
     
     // Clear localStorage when user logs out to prevent data privacy issues
     if (isNowLoggedOut) {
-      console.log('User logged out - clearing localStorage last visited')
       const LAST_VISITED_KEY = 'thinkpost_last_visited'
       localStorage.removeItem(LAST_VISITED_KEY)
       projectsClaimedRef.current = false
@@ -54,11 +53,9 @@ export function AuthProvider({ children }) {
     
     // Claim guest projects when user signs in (only once per user, not on session recovery)
     if (newUser && event === 'SIGNED_IN' && !projectsClaimedRef.current) {
-      console.log('AuthContext: User logged in, claiming guest projects...')
       projectsClaimedRef.current = true
       try {
         await claimGuestProjects()
-        console.log('AuthContext: Guest projects claimed successfully')
       } catch (err) {
         console.error('AuthContext: Failed to claim guest projects:', err)
         projectsClaimedRef.current = false // Reset on error so we can retry

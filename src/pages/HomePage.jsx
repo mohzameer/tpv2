@@ -27,15 +27,12 @@ export default function HomePage() {
       if (currentUser) {
         // Logged-in user: get last visited FIRST, then navigate
         // Don't wait for ProjectContext - it might be loading guest projects
-        console.log('HomePage: Logged-in user detected, fetching last visited from profile...')
         
         // Get last visited FIRST (sequential)
         const lastVisited = await getUserLastVisited()
-        console.log('HomePage: Last visited fetched:', lastVisited)
         
         // Then get projects
         const projects = await getProjects()
-        console.log('HomePage: Projects loaded:', projects.length)
         
         // Navigate to last visited if it exists and is valid
         if (lastVisited?.projectId && lastVisited?.docId && projects.length > 0) {
@@ -49,12 +46,10 @@ export default function HomePage() {
             })
             
             if (doc) {
-              console.log('HomePage: Navigating to last visited:', project.id, doc.id)
               hasNavigatedRef.current = true
               navigate(`/${project.id}/${doc.id}`, { replace: true })
               return
             } else if (docs.length > 0) {
-              console.log('HomePage: Last doc not found, using first doc in project')
               hasNavigatedRef.current = true
               navigate(`/${project.id}/${docs[0].id}`, { replace: true })
               return
@@ -67,7 +62,6 @@ export default function HomePage() {
           const firstProject = projects[0]
           const docs = await getDocuments(firstProject.id)
           if (docs.length > 0) {
-            console.log('HomePage: Navigating to first project/doc:', firstProject.id, docs[0].id)
             hasNavigatedRef.current = true
             navigate(`/${firstProject.id}/${docs[0].id}`, { replace: true })
             return
@@ -78,8 +72,6 @@ export default function HomePage() {
         if (loading || authLoading) {
           return
         }
-        
-        console.log('HomePage: Guest user - navigating to first project/document')
         if (project && documents.length > 0) {
           hasNavigatedRef.current = true
           navigate(`/${project.id}/${documents[0].id}`, { replace: true })

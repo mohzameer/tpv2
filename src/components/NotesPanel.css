@@ -1,3 +1,15 @@
 .bn-editor [data-placeholder]::before {
   font-style: normal !important;
 }
+
+/* Hide scrollbar but keep scrolling functionality */
+.bn-editor,
+.bn-editor * {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE and Edge */
+}
+
+.bn-editor::-webkit-scrollbar,
+.bn-editor *::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Opera */
+}

@@ -61,22 +61,16 @@ export function getLastDocumentForProject(projectId) {
 // For logged-in users: save to database
 // For guests: save to localStorage
 export async function setLastVisited(projectId, docId) {
-  console.log('setLastVisited called:', { projectId, docId, projectIdType: typeof projectId, docIdType: typeof docId })
   const { data: { user } } = await supabase.auth.getUser()
-  console.log('setLastVisited: User:', user ? { id: user.id, email: user.email } : 'NOT LOGGED IN')
   
   if (user) {
     // For logged-in users, save to database
     try {
-      console.log('setLastVisited: Saving to database for user:', user.id)
       await setUserLastVisitedDB(projectId, docId)
-      console.log('setLastVisited: Successfully saved to database')
     } catch (err) {
       console.error('setLastVisited: Failed to save last visited to database:', err)
       // Fallback to localStorage
     }
-  } else {
-    console.log('setLastVisited: No user, saving to localStorage only')
   }
   
   // Always update localStorage (for guests and as fallback)
@@ -105,7 +99,5 @@ export async function setLastVisited(projectId, docId) {
   data.projectId = projectId
   data.docId = docId
   
-  console.log('setLastVisited: Saving to localStorage:', { projectId, docId, fullData: data })
   localStorage.setItem(LAST_VISITED_KEY, JSON.stringify(data))
-  console.log('setLastVisited: localStorage updated')
 }

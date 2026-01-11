@@ -69,22 +69,12 @@ export default function DocumentPage() {
   }, [projectId, project, switchProject, projectLoading])
 
   useEffect(() => {
-    console.log('[DocumentPage] useEffect triggered', { 
-      docId, 
-      userId: user?.id, 
-      authLoading,
-      hasDocId: !!docId,
-      timestamp: Date.now()
-    })
-    
     if (!docId) {
-      console.log('[DocumentPage] Skipping - no docId')
       return
     }
     
     // Wait for auth to be ready before loading (prevents loading wrong doc during login)
     if (authLoading) {
-      console.log('[DocumentPage] Skipping - auth still loading')
       return
     }
     
@@ -96,14 +86,11 @@ export default function DocumentPage() {
     
     // Small delay to allow navigation to complete after login
     // This prevents loading the wrong document if user just logged in
-    console.log('[DocumentPage] Scheduling loadLayout in 150ms')
     const timer = setTimeout(() => {
-      console.log('[DocumentPage] Calling loadLayout')
       loadLayout()
     }, 150)
     
     return () => {
-      console.log('[DocumentPage] Cleaning up loadLayout timer')
       clearTimeout(timer)
     }
   }, [docId, user, authLoading]) // Reload when docId, user (auth state), or authLoading changes
@@ -123,15 +110,9 @@ export default function DocumentPage() {
   }, [handleModeChangeFromHeader])
 
   async function loadLayout() {
-    console.log('[DocumentPage] loadLayout started', { docId, currentLoaded: loaded })
     setLoaded(false)
-    console.log('[DocumentPage] setLoaded(false) - WorkspacePanel will unmount')
     try {
       const content = await getDocumentContent(docId)
-      console.log('[DocumentPage] loadLayout - API response received', { 
-        hasLayoutMode: !!content?.layout_mode,
-        hasLayoutRatio: !!content?.layout_ratio
-      })
       if (content?.layout_mode) {
         setMode(content.layout_mode)
       }
@@ -141,7 +122,6 @@ export default function DocumentPage() {
     } catch (err) {
       console.error('[DocumentPage] loadLayout - Failed:', err)
     } finally {
-      console.log('[DocumentPage] loadLayout completed - setLoaded(true) - WorkspacePanel will mount')
       setLoaded(true)
     }
   }
@@ -170,26 +150,13 @@ export default function DocumentPage() {
     }
   }
 
-  useEffect(() => {
-    console.log('[DocumentPage] Render state changed', { 
-      loaded,
-      mode,
-      layoutRatio,
-      willRenderWorkspacePanel: loaded,
-      timestamp: Date.now()
-    })
-  }, [loaded, mode, layoutRatio])
-
   if (!loaded) {
-    console.log('[DocumentPage] Rendering LOADER (not loaded yet)')
     return (
       <Center style={{ height: '100%', width: '100%' }}>
         <Loader size="md" />
       </Center>
     )
   }
-
-  console.log('[DocumentPage] Rendering WorkspacePanel', { mode, layoutRatio, docId })
   return (
     <WorkspacePanel 
       mode={mode} 

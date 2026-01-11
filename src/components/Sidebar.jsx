@@ -64,18 +64,15 @@ export default function Sidebar({ onCollapse }) {
       // Verify the document exists in the current project
       const docExists = documents.some(d => String(d.id) === String(docId))
       if (!docExists) {
-        console.log('Sidebar: Not saving - docId', docId, 'not found in current project documents. Available docs:', documents.map(d => d.id))
         return
       }
       
       // Verify the docId matches the project (safety check)
       if (project && documents.length > 0) {
-        console.log('Sidebar: Saving last visited - project:', project.id, 'docId:', docId, 'docExists:', docExists, 'documents:', documents.map(d => ({ id: d.id, title: d.title })))
         savingRef.current = true
         setLastVisited(project.id, docId)
           .then(() => {
             savingRef.current = false
-            console.log('Sidebar: Successfully saved last visited')
           })
           .catch(err => {
             console.error('Sidebar: Failed to save last visited:', err)
