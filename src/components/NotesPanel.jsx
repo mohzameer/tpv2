@@ -1,4 +1,5 @@
 import { Box, SegmentedControl, Textarea, Loader, Center } from '@mantine/core'
+import { IconCopy } from '@tabler/icons-react'
 import { BlockNoteSchema, defaultBlockSpecs } from '@blocknote/core'
 import { useCreateBlockNote } from '@blocknote/react'
 import { BlockNoteView } from '@blocknote/mantine'
@@ -39,6 +40,24 @@ function isEmptyBlock(block) {
     return block.content.trim() === ''
   }
   return false
+}
+
+// Helper to extract plain text from code block content
+function getCodeBlockPlainText(block) {
+  if (!block?.content) return ''
+  if (Array.isArray(block.content)) {
+    return block.content
+      .map((inline) => {
+        if (typeof inline === 'string') return inline
+        if (typeof inline === 'object' && inline.text) return inline.text
+        return ''
+      })
+      .join('')
+  }
+  if (typeof block.content === 'string') {
+    return block.content
+  }
+  return ''
 }
 
 // Convert blocks to markdown while preserving empty blocks
@@ -138,6 +157,179 @@ async function markdownToBlocksPreservingEmpty(editor, markdown) {
   }
   
   return resultBlocks.length > 0 ? resultBlocks : [{ type: 'paragraph', content: '' }]
+}
+
+// Hook to track block selection
+function useBlockSelection(editor) {
+  const [state, setState] = useState(null)
+
+  useEffect(() => {
+    if (!editor) return
+
+    const updateState = () => {
+      // Try to get selection first
+      const selection = editor.getSelection()
+      let block = null
+      
+      if (selection && selection.blocks && selection.blocks.length > 0) {
+        // Use the first selected block
+        block = selection.blocks[0]
+      } else {
+        // If no selection, get block at cursor position
+        const cursorPosition = editor.getTextCursorPosition()
+        if (cursorPosition) {
+          block = cursorPosition.block
+        }
+      }
+
+      if (!block) {
+        setState(null)
+        return
+      }
+
+      // Find the block's DOM element by traversing from selection/cursor
+      let blockRect = null
+      try {
+        const domSelection = window.getSelection()
+        let startElement = null
+        
+        if (domSelection && domSelection.rangeCount > 0) {
+          const range = domSelection.getRangeAt(0)
+          startElement = range.commonAncestorContainer
+        } else {
+          // No selection, try to find active element (cursor position)
+          const activeElement = document.activeElement
+          if (activeElement) {
+            startElement = activeElement
+          }
+        }
+        
+        if (startElement) {
+          let element = startElement
+          
+          // If it's a text node, get the parent element
+          if (element.nodeType === Node.TEXT_NODE) {
+            element = element.parentElement
+          }
+          
+          // Walk up the DOM tree to find the code block container
+          while (element) {
+            // Check for BlockNote code block indicators
+            const nodeType = element.getAttribute?.('data-node-type')
+            const className = element.className || ''
+            
+            if (nodeType === 'codeBlock' || 
+                className.includes('codeBlock') ||
+                element.tagName === 'PRE' ||
+                (element.tagName === 'CODE' && element.closest('pre'))) {
+              // Found the code block container
+              const codeBlockContainer = element.tagName === 'CODE' ? element.closest('pre') || element.parentElement : element
+              if (codeBlockContainer) {
+                blockRect = codeBlockContainer.getBoundingClientRect()
+                break
+              }
+            }
+            
+            // Stop if we've reached the editor root
+            if (element.classList?.contains('bn-editor') || 
+                element.hasAttribute?.('data-blocknote-editor')) {
+              break
+            }
+            
+            element = element.parentElement
+          }
+        }
+      } catch (err) {
+        console.debug('Could not find block DOM element:', err)
+      }
+
+      setState({
+        block,
+        blockRect,
+      })
+    }
+
+    const unsubscribe = editor.onSelectionChange(updateState)
+    
+    // Also update on scroll/resize to keep button position correct
+    const handleScroll = () => updateState()
+    const handleResize = () => updateState()
+    
+    window.addEventListener('scroll', handleScroll, true)
+    window.addEventListener('resize', handleResize)
+    
+    // Initial update
+    updateState()
+
+    return () => {
+      unsubscribe()
+      window.removeEventListener('scroll', handleScroll, true)
+      window.removeEventListener('resize', handleResize)
+    }
+  }, [editor])
+
+  return state
+}
+
+// Floating copy button component (only for code blocks)
+function FloatingCopyButton({ editor }) {
+  const selection = useBlockSelection(editor)
+
+  // Only show for code blocks
+  if (!selection?.block || selection.block.type !== 'codeBlock') return null
+
+  // Only show if we have the block's DOM position
+  if (!selection.blockRect) return null
+
+  const buttonStyle = {
+    position: 'fixed',
+    top: selection.blockRect.top + window.scrollY + 4,
+    left: selection.blockRect.right + window.scrollX - 28,
+    zIndex: 1000,
+    width: '24px',
+    height: '24px',
+    padding: 0,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: '4px',
+    border: '1px solid rgba(0,0,0,0.2)',
+    background: 'rgba(255,255,255,0.95)',
+    cursor: 'pointer',
+    boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+  }
+
+  const handleCopy = async () => {
+    try {
+      // Get plain text from the code block
+      let text = getCodeBlockPlainText(selection.block)
+      if (!text.trim()) {
+        console.warn('No text to copy from code block')
+        return
+      }
+      
+      // Remove trailing backslashes from each line (sanitize)
+      text = text
+        .split('\n')
+        .map(line => line.replace(/\\+$/, ''))
+        .join('\n')
+      
+      await navigator.clipboard.writeText(text)
+    } catch (err) {
+      console.error('Failed to copy code block:', err)
+    }
+  }
+
+  return (
+    <button
+      style={buttonStyle}
+      onMouseDown={(e) => e.preventDefault()}
+      onClick={handleCopy}
+      title="Copy code"
+    >
+      <IconCopy size={14} />
+    </button>
+  )
 }
 
 export default function NotesPanel({ docId }) {
@@ -277,7 +469,10 @@ export default function NotesPanel({ docId }) {
       </Box>
       <Box style={{ flex: 1, overflow: 'auto', paddingTop: 40, paddingBottom: 400 }}>
         {textMode === 'text' ? (
-          <BlockNoteView editor={editor} theme={colorScheme} onChange={handleChange} />
+          <>
+            <BlockNoteView editor={editor} theme={colorScheme} onChange={handleChange} />
+            <FloatingCopyButton editor={editor} />
+          </>
         ) : (
           <Textarea
             value={markdownText}
