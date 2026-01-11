@@ -16,7 +16,7 @@ export default function DrawingPanel({ docId }) {
   })
   const saveTimeout = useRef(null)
   const viewportSaveTimeout = useRef(null)
-  const excalidrawRef = useRef(null)
+  const excalidrawAPIRef = useRef(null)
   const lastSavedContent = useRef(null)
   const { colorScheme } = useTheme()
   const { setIsSyncing } = useSync()
@@ -105,6 +105,11 @@ export default function DrawingPanel({ docId }) {
           drawingContent.appState = {}
         }
         
+        // Ensure files object exists (critical for image rendering)
+        if (!drawingContent.files) {
+          drawingContent.files = {}
+        }
+        
         // Set defaults for missing viewport properties
         const scrollX = drawingContent.appState.scrollX ?? 0
         const scrollY = drawingContent.appState.scrollY ?? 0
@@ -121,6 +126,16 @@ export default function DrawingPanel({ docId }) {
           zoom
         }
         
+        // Log file verification before setting initialData
+        const imageElements = drawingContent.elements?.filter(e => e.type === 'image') || []
+        const filesCount = Object.keys(drawingContent.files || {}).length
+        console.log(`[DrawingPanel] loadContent #${loadId} - Loaded drawing_content`, {
+          elements: drawingContent.elements?.length || 0,
+          files: filesCount,
+          imageElements: imageElements.length,
+          allFilesPresent: imageElements.length === 0 || filesCount > 0
+        })
+        
         console.log(`[DrawingPanel] loadContent #${loadId} - Setting initialData (from saved content)`)
         setInitialData(drawingContent)
         lastSavedContent.current = JSON.stringify(drawingContent)
@@ -130,6 +145,7 @@ export default function DrawingPanel({ docId }) {
         
         const defaultData = {
           elements: [],
+          files: {},
           appState: defaultViewport
         }
         console.log(`[DrawingPanel] loadContent #${loadId} - Setting initialData (default/empty)`)
@@ -148,6 +164,7 @@ export default function DrawingPanel({ docId }) {
       console.log(`[DrawingPanel] loadContent #${loadId} - Setting initialData (error fallback)`)
       setInitialData({
         elements: [],
+        files: {},
         appState: defaultViewport
       })
       // Still mark as loaded even on error to prevent retry loops
@@ -156,6 +173,10 @@ export default function DrawingPanel({ docId }) {
     } finally {
       isLoadingRef.current = false
     }
+  }
+
+  function handleExcalidrawAPI(api) {
+    excalidrawAPIRef.current = api
   }
 
   function handleChange(elements, appState) {
@@ -181,7 +202,7 @@ export default function DrawingPanel({ docId }) {
     
     // Get current content to merge viewport state
     const content = await getDocumentContent(docId)
-    const currentContent = content?.drawing_content || { elements: [], appState: {} }
+    const currentContent = content?.drawing_content || { elements: [], files: {}, appState: {} }
     
     // Merge viewport state with existing appState
     const updatedAppState = {
@@ -195,8 +216,10 @@ export default function DrawingPanel({ docId }) {
       } : { value: 1.0, offsetX: 0, offsetY: 0 }
     }
     
+    // Preserve files when saving viewport state (critical!)
     const newContent = {
       elements: currentContent.elements || [],
+      files: currentContent.files || {},
       appState: updatedAppState
     }
     
@@ -220,9 +243,20 @@ export default function DrawingPanel({ docId }) {
     // Get current viewport state from local state
     const currentViewport = viewportState
     
-    // Merge elements, background color, and viewport state
+    // Get files from Excalidraw API (CRITICAL for image persistence)
+    let files = {}
+    if (excalidrawAPIRef.current) {
+      try {
+        files = excalidrawAPIRef.current.getFiles()
+      } catch (err) {
+        console.warn('Failed to get files from Excalidraw API:', err)
+      }
+    }
+    
+    // Merge elements, files, background color, and viewport state
     const newContent = {
       elements,
+      files, // MUST include files for images to render correctly
       appState: {
         viewBackgroundColor: appState.viewBackgroundColor,
         scrollX: currentViewport.scrollX,
@@ -230,6 +264,16 @@ export default function DrawingPanel({ docId }) {
         zoom: currentViewport.zoom
       }
     }
+    
+    // Log verification before saving
+    const imageElements = elements.filter(e => e.type === 'image')
+    const filesCount = Object.keys(files).length
+    console.log('[DrawingPanel] saveContent - Verification before save:', {
+      elements: elements.length,
+      filesCount,
+      imageElements: imageElements.length,
+      allFilesPresent: imageElements.length === 0 || filesCount > 0
+    })
     
     const currentContent = JSON.stringify(newContent)
     if (currentContent === lastSavedContent.current) return
@@ -264,9 +308,17 @@ export default function DrawingPanel({ docId }) {
   }
 
   const excalidrawKey = `${docId}-${user?.id || 'guest'}`
+  
+  // Log verification before rendering
+  const imageElements = initialData?.elements?.filter(e => e.type === 'image') || []
+  const filesCount = Object.keys(initialData?.files || {}).length
   console.log('[DrawingPanel] Rendering EXCALIDRAW', { 
     excalidrawKey,
     hasInitialData: !!initialData,
+    elements: initialData?.elements?.length || 0,
+    files: filesCount,
+    imageElements: imageElements.length,
+    allFilesPresent: imageElements.length === 0 || filesCount > 0,
     timestamp: Date.now()
   })
 
@@ -274,7 +326,7 @@ export default function DrawingPanel({ docId }) {
     <div style={{ height: '100%', width: '100%', position: 'relative' }}>
       <Excalidraw
         key={excalidrawKey} // Force remount when docId or user changes
-        ref={excalidrawRef}
+        excalidrawAPI={handleExcalidrawAPI}
         initialData={{
           ...initialData,
           scrollToContent: false  // Prevent auto-scroll, use saved scroll position
