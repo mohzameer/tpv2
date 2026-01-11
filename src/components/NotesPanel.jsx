@@ -16,6 +16,7 @@ const {
   ...markdownBlocks 
 } = defaultBlockSpecs
 
+// Use default block specs
 const schema = BlockNoteSchema.create({
   blockSpecs: markdownBlocks,
 })
@@ -159,6 +160,7 @@ export default function NotesPanel({ docId }) {
     setLoading(true)
     loadContent()
   }, [docId, user]) // Reload when docId or user (auth state) changes
+
 
   async function loadContent() {
     try {
