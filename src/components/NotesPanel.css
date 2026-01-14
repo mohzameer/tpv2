@@ -13,3 +13,17 @@
 .bn-editor *::-webkit-scrollbar {
   display: none; /* Chrome, Safari, Opera */
 }
+
+/* Add top padding to editor content */
+.bn-editor {
+  padding-top: 24px !important;
+  background-color: transparent !important;
+}
+
+/* Ensure BlockNote container and root elements don't override background */
+.bn-container,
+.bn-root,
+[class*="bn-container"],
+[class*="bn-root"] {
+  background-color: transparent !important;
+}

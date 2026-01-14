@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { Modal, Stack, Group, Text, ActionIcon, TextInput, Box, Loader, Center, Menu, Button } from '@mantine/core'
-import { IconFolder, IconPlus, IconCheck, IconX, IconFile, IconBrush, IconTrash, IconChevronLeft } from '@tabler/icons-react'
+import { IconFolder, IconPlus, IconCheck, IconX, IconFile, IconBrush, IconTrash, IconChevronLeft, IconPencil } from '@tabler/icons-react'
 import { useProjectContext } from '../context/ProjectContext'
 import { getProjects, createProject, getDocuments, updateDocument, deleteDocument, createDocument } from '../lib/api'
 import { getLastDocumentForProject } from '../lib/lastVisited'
@@ -196,13 +196,13 @@ export default function ProjectsModal({ opened, onClose }) {
             <Group gap="xs">
               <Menu shadow="md" position="bottom-end">
                 <Menu.Target>
-                  <ActionIcon 
-                    variant="subtle" 
-                    color="gray" 
-                    size="sm"
+                  <Button
+                    variant="outline"
+                    size="xs"
+                    leftSection={<IconPlus size={14} />}
                   >
-                    <IconPlus size={16} />
-                  </ActionIcon>
+                    New document
+                  </Button>
                 </Menu.Target>
                 <Menu.Dropdown>
                   <Menu.Item 
@@ -258,7 +258,6 @@ export default function ProjectsModal({ opened, onClose }) {
                   <Box
                     key={doc.id}
                     onClick={() => handleSelectDocument(doc)}
-                    onDoubleClick={() => handleDoubleClick(doc)}
                     p="xs"
                     className="sidebar-item"
                     data-active={isActive}
@@ -291,19 +290,32 @@ export default function ProjectsModal({ opened, onClose }) {
                             <Text size="sm" fw={isActive ? 500 : 400} truncate>{doc.title}</Text>
                             <Group gap={4} wrap="nowrap" justify="space-between">
                               <Text size="xs" c="dimmed">{formatDate(doc.updated_at)}</Text>
-                              {isActive && documents.length > 1 && (
+                              <Group gap={4} wrap="nowrap">
                                 <ActionIcon
                                   variant="transparent"
                                   size="xs"
                                   color="gray"
                                   onClick={(e) => {
                                     e.stopPropagation()
-                                    setDeleteConfirm(doc)
+                                    handleDoubleClick(doc)
                                   }}
                                 >
-                                  <IconTrash size={12} />
+                                  <IconPencil size={12} />
                                 </ActionIcon>
-                              )}
+                                {isActive && documents.length > 1 && (
+                                  <ActionIcon
+                                    variant="transparent"
+                                    size="xs"
+                                    color="gray"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      setDeleteConfirm(doc)
+                                    }}
+                                  >
+                                    <IconTrash size={12} />
+                                  </ActionIcon>
+                                )}
+                              </Group>
                             </Group>
                           </>
                         )}

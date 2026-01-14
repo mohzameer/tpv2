@@ -723,13 +723,23 @@ export default function NotesPanel({ docId }) {
   }
 
   return (
-    <Box style={{ display: 'flex', flexDirection: 'column', height: '100%', position: 'relative' }}>
+    <Box 
+      style={{ 
+        display: 'flex', 
+        flexDirection: 'column', 
+        height: '100%', 
+        position: 'relative',
+        backgroundColor: colorScheme === 'dark' ? '#1a1b1e' : '#f8f9fa',
+      }}
+    >
       <Box 
         style={{ 
           flex: 1, 
           overflow: 'auto', 
-          paddingTop: 8, 
-          paddingBottom: 400,
+          paddingTop: '48px',
+          paddingLeft: '200px',
+          paddingRight: '200px',
+          paddingBottom: '48px',
           scrollbarWidth: 'none', /* Firefox */
           msOverflowStyle: 'none', /* IE and Edge */
         }}
@@ -739,7 +749,20 @@ export default function NotesPanel({ docId }) {
           },
         }}
       >
-        <BlockNoteView editor={editor} theme={colorScheme} onChange={handleChange} />
+        <Box
+          style={{
+            backgroundColor: colorScheme === 'dark' ? 'var(--mantine-color-dark-7)' : '#ffffff',
+            minHeight: '1200px',
+            paddingTop: '24px',
+            paddingLeft: '24px',
+            paddingRight: '24px',
+            paddingBottom: '400px',
+            border: colorScheme === 'dark' ? '1px solid var(--mantine-color-dark-4)' : '1px solid #e0e0e0',
+            borderRadius: '5px',
+          }}
+        >
+          <BlockNoteView editor={editor} theme={colorScheme} onChange={handleChange} />
+        </Box>
         <FloatingCopyButton editor={editor} />
       </Box>
     </Box>

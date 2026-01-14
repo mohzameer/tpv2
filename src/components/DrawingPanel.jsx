@@ -427,7 +427,7 @@ export default function DrawingPanel({ docId }) {
           ...initialData,
           scrollToContent: false  // Prevent auto-scroll, use saved scroll position
         }}
-        zenModeEnabled={true}
+        zenModeEnabled={false}
         onChange={handleChange}  // Handles elements and background color
         onScrollChange={handleScrollChange}  // Handles viewport state (scroll/zoom)
         theme={colorScheme}
