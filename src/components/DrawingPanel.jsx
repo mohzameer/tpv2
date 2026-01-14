@@ -59,66 +59,6 @@ export default function DrawingPanel({ docId }) {
     }
   }, [])
 
-  // Listen for force save before mode change
-  useEffect(() => {
-    const handleForceSave = async (e) => {
-      if (!excalidrawAPIRef.current || !docId) return
-      
-      try {
-        // Get current state from Excalidraw API
-        const elements = excalidrawAPIRef.current.getSceneElements()
-        const appState = excalidrawAPIRef.current.getAppState()
-        
-        if (elements) {
-          // Clear any pending timeout and save immediately
-          if (saveTimeout.current) {
-            clearTimeout(saveTimeout.current)
-            saveTimeout.current = null
-          }
-          
-          // Call saveContent directly
-          const currentViewport = viewportState
-          let files = {}
-          try {
-            files = excalidrawAPIRef.current.getFiles()
-          } catch (err) {
-            // Failed to get files in force save
-          }
-          
-          const newContent = {
-            elements,
-            files,
-            appState: {
-              viewBackgroundColor: appState.viewBackgroundColor,
-              scrollX: currentViewport.scrollX,
-              scrollY: currentViewport.scrollY,
-              zoom: currentViewport.zoom
-            }
-          }
-          
-          const contentString = JSON.stringify(newContent)
-          if (contentString !== lastSavedContent.current) {
-            setIsSyncing(true)
-            // Save files to both places for backup/recovery
-            await updateDocumentContent(docId, { 
-              drawing_content: newContent,
-              drawing_files: files  // Save files separately
-            })
-            lastSavedContent.current = contentString
-            setIsSyncing(false)
-          }
-        }
-      } catch (err) {
-        setIsSyncing(false)
-      }
-    }
-    
-    window.addEventListener('forceSaveBeforeModeChange', handleForceSave)
-    return () => {
-      window.removeEventListener('forceSaveBeforeModeChange', handleForceSave)
-    }
-  }, [docId, viewportState])
-
   // Validate and normalize file objects for Excalidraw
   function normalizeFiles(files) {
     if (!files || typeof files !== 'object') {

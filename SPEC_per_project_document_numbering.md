@@ -5,22 +5,45 @@
 
 ## Date
 2024-12-17
+Updated: 2024-12-18 (aligned with unified document architecture)
 
 ## Overview
 Implement per-project document numbering so that each project has its own sequential document numbers (1, 2, 3...) instead of global all-time numbering. Document IDs remain unchanged for backward compatibility.
 
+**Note**: This specification assumes the unified document architecture (see `SPEC_unified_document_architecture.md`) is already in place. Documents now have a `document_type` field ('text' or 'drawing'), and both types are shown in a unified document list. Document numbering applies to all document types within each project.
+
 ## Goals
-1. Add `document_number` field to `documents` table (per-project sequential numbering)
-2. Auto-assign document numbers on document creation
+1. Add `document_number` field to `documents` table (per-project sequential numbering for all document types)
+2. Auto-assign document numbers on document creation (both text and drawing documents)
 3. Store document numbers in new localStorage key (separate from existing)
 4. Maintain backward compatibility with existing document IDs
 5. No breaking changes to URLs or routing
+6. Work seamlessly with unified document architecture (text and drawing documents numbered together per project)
 
 ## Non-Goals
 - Changing document IDs in URLs
 - Re-sequencing documents after deletion (gaps are acceptable)
 - Migrating existing localStorage data
 - Changing foreign key relationships
+- Separate numbering for text vs drawing documents (they share the same sequence per project)
+
+## Architecture Context
+
+This specification builds on the **unified document architecture** (see `SPEC_unified_document_architecture.md`), which is already implemented:
+
+- Documents have a `document_type` field ('text' or 'drawing')
+- Both document types are shown in a unified sidebar list
+- `DocumentPage` conditionally renders `NotesPanel` or `DrawingPanel` based on `document_type`
+- No split-screen complexity (WorkspacePanel removed)
+- Simplified navigation and state management
+
+**Document numbering applies to all document types within each project**. For example, a project might have:
+- Document #1: text document
+- Document #2: drawing document  
+- Document #3: text document
+- etc.
+
+The numbering sequence is shared across document types, maintaining a single sequential order per project.
 
 ---
 
@@ -45,6 +68,8 @@ ON documents(project_id, document_number);
 
 #### 1.2 Backfill Existing Documents
 
+**Note**: The backfill assigns sequential numbers to all documents (both text and drawing types) within each project, based on creation order. Document numbers are shared across document types within a project (e.g., a project might have text document #1, drawing document #2, text document #3, etc.).
+
 **Option A: Run as part of main migration**
 The main migration script (`001_per_project_document_numbering.sql`) includes the backfill step.
 
@@ -57,6 +82,7 @@ Use the standalone backfill script (`002_backfill_document_numbers.sql`) which:
 
 ```sql
 -- Assign sequential numbers per project based on creation order
+-- Numbers are assigned to all document types (text and drawing) together
 WITH numbered_docs AS (
   SELECT 
     id,
@@ -205,14 +231,17 @@ export function setLastVisitedDocumentNumber(projectId, documentNumber) {
 **File**: `src/lib/api.js`
 
 #### 3.1 Update `createDocument` Response
-Ensure `document_number` is returned in the response (should be automatic).
+Ensure `document_number` is returned in the response (should be automatic). Works for both text and drawing document types.
+
+**Note**: The `createDocument` function now accepts `documentType` parameter ('text' or 'drawing') as part of the unified architecture. Document numbers are assigned regardless of document type.
 
 #### 3.2 Update `getDocuments` Response
-Ensure `document_number` is included in document objects.
+Ensure `document_number` is included in document objects. The unified document list includes both text and drawing documents, all with document numbers.
 
 #### 3.3 Add Helper Function (Optional)
 ```javascript
 // Get document by project_id and document_number
+// Works for both text and drawing documents
 export async function getDocumentByNumber(projectId, documentNumber) {
   const { data, error } = await supabase
     .from('documents')
@@ -231,37 +260,47 @@ export async function getDocumentByNumber(projectId, documentNumber) {
 #### 4.1 Sidebar Component
 **File**: `src/components/Sidebar.jsx`
 
+**Context**: The Sidebar now shows a unified list of all documents (both text and drawing types) with type-specific icons. The unified architecture is already in place.
+
 **Changes**:
-- Display document numbers alongside or instead of titles (optional)
-- Store document numbers in new localStorage when navigating
+- Store document numbers in new localStorage when navigating (works for both text and drawing documents)
 - Use document numbers for "last visited" tracking
+- Display document numbers alongside or instead of titles (optional, future enhancement)
 
 **Example**:
 ```javascript
-// When navigating to a document
+// When navigating to a document (in Sidebar or elsewhere)
 const doc = documents.find(d => d.id === docId)
 if (doc && doc.document_number) {
+  // Works for both text and drawing documents
   setLastVisitedDocumentNumber(project.id, doc.document_number)
 }
 ```
 
 #### 4.2 Navigation Logic
 **Files**: 
+- `src/components/Sidebar.jsx` (primary navigation)
 - `src/pages/HomePage.jsx`
 - `src/pages/LoginPage.jsx`
 - `src/hooks/useProject.js`
 
+**Context**: The unified architecture has simplified navigation. `DocumentPage` now conditionally renders either `NotesPanel` or `DrawingPanel` based on `document_type`, without split-screen complexity.
+
 **Changes**:
 - When restoring last visited, try document number first, fallback to document ID
 - Handle cases where document number doesn't exist (graceful degradation)
+- Works seamlessly for both text and drawing documents
 
 **Example**:
 ```javascript
+// In Sidebar.jsx or navigation logic
 // Try to find by document number first
 const lastDocNumber = getLastDocumentNumberForProject(projectId)
 if (lastDocNumber) {
+  // Find document by number (works for any document_type)
   const doc = documents.find(d => d.document_number === lastDocNumber)
   if (doc) {
+    // DocumentPage will automatically render the correct editor based on document_type
     navigate(`/${projectId}/${doc.id}`) // Still use ID in URL
     return
   }
@@ -311,10 +350,12 @@ const lastDocId = getLastDocumentForProject(projectId)
 
 ### Unit Tests
 1. **Document Creation**
-   - Create document in Project A → should get document_number = 1
-   - Create second document in Project A → should get document_number = 2
-   - Create document in Project B → should get document_number = 1
+   - Create text document in Project A → should get document_number = 1
+   - Create drawing document in Project A → should get document_number = 2
+   - Create second text document in Project A → should get document_number = 3
+   - Create document in Project B → should get document_number = 1 (independent numbering)
    - Verify no race conditions with concurrent inserts
+   - Verify document numbers are shared across document types within a project
 
 2. **localStorage**
    - Verify new key is created
@@ -328,26 +369,30 @@ const lastDocId = getLastDocumentForProject(projectId)
 
 ### Integration Tests
 1. **Full Flow**
-   - Create project → Create documents → Navigate → Verify numbers
-   - Switch projects → Verify per-project numbering
-   - Delete document → Verify gaps are acceptable
-   - Restore last visited → Verify correct document opens
+   - Create project → Create text and drawing documents → Navigate → Verify numbers
+   - Switch projects → Verify per-project numbering (independent per project)
+   - Delete document (any type) → Verify gaps are acceptable
+   - Restore last visited → Verify correct document opens (works for both types)
+   - Navigate between text and drawing documents → Verify numbering continuity
 
 2. **Edge Cases**
-   - Empty project → Create first document
-   - Project with many documents (100+)
-   - Concurrent document creation
-   - Document deletion and recreation
+   - Empty project → Create first document (text or drawing)
+   - Project with many documents (100+, mix of types)
+   - Concurrent document creation (both types)
+   - Document deletion and recreation (any type)
+   - Mixed document types in same project → verify numbering continuity
 
 ### Manual Testing Checklist
-- [ ] Create new document → verify document_number assigned
-- [ ] Create multiple documents in same project → verify sequential numbering
-- [ ] Create documents in different projects → verify independent numbering
-- [ ] Navigate between documents → verify localStorage updated
-- [ ] Refresh page → verify last visited restored correctly
-- [ ] Delete document → verify gaps are acceptable
+- [ ] Create new text document → verify document_number assigned
+- [ ] Create new drawing document → verify document_number assigned (sequential with text docs)
+- [ ] Create multiple documents (mix of text and drawing) in same project → verify sequential numbering
+- [ ] Create documents in different projects → verify independent numbering per project
+- [ ] Navigate between text and drawing documents → verify localStorage updated with document numbers
+- [ ] Refresh page → verify last visited restored correctly (works for both document types)
+- [ ] Delete document (any type) → verify gaps are acceptable
 - [ ] Verify old localStorage key unchanged
 - [ ] Verify URLs still use document IDs
+- [ ] Verify DocumentPage renders correct editor (NotesPanel or DrawingPanel) based on document_type
 
 ---
 
@@ -422,14 +467,16 @@ DROP INDEX IF EXISTS idx_documents_project_number;
 
 ## Success Criteria
 
-1. ✅ All existing documents have `document_number` assigned
-2. ✅ New documents automatically get sequential numbers per project
-3. ✅ No breaking changes to existing functionality
-4. ✅ Old localStorage key remains untouched
-5. ✅ New localStorage key stores document numbers correctly
-6. ✅ Navigation works with both old and new systems
-7. ✅ No performance degradation
-8. ✅ All tests pass
+1. ✅ All existing documents (text and drawing) have `document_number` assigned
+2. ✅ New documents (both types) automatically get sequential numbers per project
+3. ✅ Document numbers are shared across document types within each project
+4. ✅ No breaking changes to existing functionality
+5. ✅ Old localStorage key remains untouched
+6. ✅ New localStorage key stores document numbers correctly
+7. ✅ Navigation works with both old and new systems (for both document types)
+8. ✅ DocumentPage correctly renders NotesPanel or DrawingPanel based on document_type
+9. ✅ No performance degradation
+10. ✅ All tests pass
 
 ---
 
@@ -450,6 +497,14 @@ DROP INDEX IF EXISTS idx_documents_project_number;
 - URLs continue to use document IDs
 - Old localStorage key continues to work
 - Graceful fallback if document number lookup fails
+- Works with unified document architecture (document_type field)
+- Document numbering applies to all document types (text and drawing) within each project
+
+### Unified Architecture Integration
+- Document numbering works seamlessly with the unified document list
+- Both text and drawing documents share the same numbering sequence per project
+- DocumentPage automatically renders the correct editor based on document_type
+- No changes needed to the simplified DocumentPage structure (no WorkspacePanel)
 
 ---
 

@@ -1,5 +1,5 @@
-import { Stack, ActionIcon, Loader, Center, Box, Group, Text, TextInput, Modal, Button } from '@mantine/core'
-import { IconFile, IconPlus, IconChevronLeft, IconTrash } from '@tabler/icons-react'
+import { Stack, ActionIcon, Loader, Center, Box, Group, Text, TextInput, Modal, Button, Menu } from '@mantine/core'
+import { IconFile, IconPlus, IconTrash, IconBrush } from '@tabler/icons-react'
 import './Sidebar.css'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useEffect, useState, useRef } from 'react'
@@ -7,6 +7,7 @@ import { useProjectContext } from '../context/ProjectContext'
 import { setLastVisited, getLastDocumentForProject } from '../lib/lastVisited'
 import { updateDocument, deleteDocument } from '../lib/api'
 import { useAuth } from '../context/AuthContext'
+import { isDrawing } from '../lib/documentType'
 
 function formatDate(dateString) {
   if (!dateString) return ''
@@ -22,7 +23,7 @@ function formatDate(dateString) {
   return date.toLocaleDateString()
 }
 
-export default function Sidebar({ onCollapse }) {
+export default function Sidebar({ onCollapse, onAddDocument }) {
   const navigate = useNavigate()
   const { docId } = useParams()
   const { project, documents, loading, addDocument, refreshDocuments } = useProjectContext()
@@ -84,8 +85,17 @@ export default function Sidebar({ onCollapse }) {
     return () => clearTimeout(timeoutId)
   }, [project, docId, documents, loading])
 
-  async function handleAddDocument() {
-    const doc = await addDocument()
+  // Debug: log documents to console
+  useEffect(() => {
+    if (!loading && project) {
+      console.log('[Sidebar] Documents:', documents.length, documents)
+      console.log('[Sidebar] Project:', project?.id)
+    }
+  }, [documents, loading, project])
+
+  async function handleAddDocument(documentType = 'text') {
+    const title = documentType === 'drawing' ? 'Untitled drawing' : 'Untitled'
+    const doc = await addDocument(title, documentType)
     if (doc && project) {
       navigate(`/${project.id}/${doc.id}`)
     }
@@ -143,84 +153,89 @@ export default function Sidebar({ onCollapse }) {
     new Date(b.updated_at) - new Date(a.updated_at)
   )
 
+  // Expose add document handlers if callback provided
+  useEffect(() => {
+    if (onAddDocument) {
+      onAddDocument({
+        addText: () => handleAddDocument('text'),
+        addDrawing: () => handleAddDocument('drawing'),
+      })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onAddDocument, project])
+
   return (
-    <Stack p="sm" gap="xs" style={{ height: '100%' }}>
-      <Stack gap="xs" style={{ flex: 1 }}>
-        {sortedDocuments.map((doc) => {
-          const isActive = docId !== undefined && String(docId) === String(doc.id)
-          return (
-            <Box
-              key={doc.id}
-              onClick={() => navigate(`/${project.id}/${doc.id}`)}
-              onDoubleClick={() => handleDoubleClick(doc)}
-              p="xs"
-              className="sidebar-item"
-              data-active={isActive}
-            >
-              <Group gap="xs" wrap="nowrap">
-                <IconFile size={16} color="var(--mantine-color-gray-6)" style={{ flexShrink: 0 }} />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  {editingId === doc.id ? (
-                    <TextInput
-                      value={editingTitle}
-                      onChange={(e) => {
-                        if (e.target.value.length <= 100) {
-                          setEditingTitle(e.target.value)
-                        }
-                      }}
-                      onBlur={handleRename}
-                      onKeyDown={handleKeyDown}
-                      size="xs"
-                      maxLength={100}
-                      autoFocus
-                      onClick={(e) => e.stopPropagation()}
-                      onDoubleClick={(e) => e.stopPropagation()}
-                    />
-                  ) : (
-                    <>
-                      <Text size="sm" fw={isActive ? 500 : 400} truncate>{doc.title}</Text>
-                      <Group gap={4} wrap="nowrap" justify="space-between">
-                        <Text size="xs" c="dimmed">{formatDate(doc.updated_at)}</Text>
-                        {isActive && documents.length > 1 && (
-                          <ActionIcon
-                            variant="transparent"
-                            size="xs"
-                            color="gray"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              setDeleteConfirm(doc)
-                            }}
-                          >
-                            <IconTrash size={12} />
-                          </ActionIcon>
-                        )}
-                      </Group>
-                    </>
-                  )}
-                </div>
-              </Group>
-            </Box>
-          )
-        })}
-      </Stack>
-      <Group justify="space-between">
-        <ActionIcon 
-          variant="subtle" 
-          color="gray" 
-          size="md" 
-          onClick={onCollapse}
-        >
-          <IconChevronLeft size={16} />
-        </ActionIcon>
-        <ActionIcon 
-          variant="subtle" 
-          color="gray" 
-          size="md" 
-          onClick={handleAddDocument}
-        >
-          <IconPlus size={16} />
-        </ActionIcon>
-      </Group>
+    <Stack gap={0} style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <Box className="sidebar-documents-container">
+        {sortedDocuments.length === 0 && !loading ? (
+          <Center p="md" style={{ height: '100%' }}>
+            <Text size="sm" c="dimmed">No documents yet</Text>
+          </Center>
+        ) : (
+          <div className="sidebar-documents-grid">
+            {sortedDocuments.map((doc) => {
+              const isActive = docId !== undefined && String(docId) === String(doc.id)
+              return (
+                <Box
+                  key={doc.id}
+                  onClick={() => navigate(`/${project.id}/${doc.id}`)}
+                  onDoubleClick={() => handleDoubleClick(doc)}
+                  p="xs"
+                  className="sidebar-item"
+                  data-active={isActive}
+                >
+                  <Group gap="xs" wrap="nowrap">
+                    {isDrawing(doc) ? (
+                      <IconBrush size={16} color="var(--mantine-color-blue-6)" style={{ flexShrink: 0 }} />
+                    ) : (
+                      <IconFile size={16} color="var(--mantine-color-gray-6)" style={{ flexShrink: 0 }} />
+                    )}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      {editingId === doc.id ? (
+                        <TextInput
+                          value={editingTitle}
+                          onChange={(e) => {
+                            if (e.target.value.length <= 100) {
+                              setEditingTitle(e.target.value)
+                            }
+                          }}
+                          onBlur={handleRename}
+                          onKeyDown={handleKeyDown}
+                          size="xs"
+                          maxLength={100}
+                          autoFocus
+                          onClick={(e) => e.stopPropagation()}
+                          onDoubleClick={(e) => e.stopPropagation()}
+                        />
+                      ) : (
+                        <>
+                          <Text size="sm" fw={isActive ? 500 : 400} truncate>{doc.title}</Text>
+                          <Group gap={4} wrap="nowrap" justify="space-between">
+                            <Text size="xs" c="dimmed">{formatDate(doc.updated_at)}</Text>
+                            {isActive && documents.length > 1 && (
+                              <ActionIcon
+                                variant="transparent"
+                                size="xs"
+                                color="gray"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  setDeleteConfirm(doc)
+                                }}
+                              >
+                                <IconTrash size={12} />
+                              </ActionIcon>
+                            )}
+                          </Group>
+                        </>
+                      )}
+                    </div>
+                  </Group>
+                </Box>
+              )
+            })}
+          </div>
+        )}
+      </Box>
 
       <Modal opened={!!deleteConfirm} onClose={() => setDeleteConfirm(null)} title="Delete Document" centered size="sm">
         <Text size="sm" mb="lg">Are you sure you want to delete "{deleteConfirm?.title}"?</Text>
