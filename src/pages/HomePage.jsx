@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { Center, Loader } from '@mantine/core'
 import { getUserLastVisited, getProjects, getDocuments } from '../lib/api'
+import { getLastDocumentNumberForProject } from '../lib/lastVisited'
 import { useProjectContext } from '../context/ProjectContext'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabase'
@@ -35,23 +36,26 @@ export default function HomePage() {
         const projects = await getProjects()
         
         // Navigate to last visited if it exists and is valid
-        if (lastVisited?.projectId && lastVisited?.docId && projects.length > 0) {
+        if (lastVisited?.projectId && projects.length > 0) {
           const project = projects.find(p => p.id === lastVisited.projectId)
           if (project) {
             const docs = await getDocuments(project.id)
-            const doc = docs.find(d => {
-              const docIdNum = typeof d.id === 'number' ? d.id : parseInt(d.id, 10)
-              const lastDocIdNum = typeof lastVisited.docId === 'number' ? lastVisited.docId : parseInt(lastVisited.docId, 10)
-              return docIdNum === lastDocIdNum
-            })
             
-            if (doc) {
+            // Try to find by document number
+            const lastDocNumber = getLastDocumentNumberForProject(project.id)
+            if (lastDocNumber) {
+              const doc = docs.find(d => d.document_number === lastDocNumber)
+              if (doc && doc.document_number) {
+                hasNavigatedRef.current = true
+                navigate(`/${project.id}/${doc.document_number}`, { replace: true })
+                return
+              }
+            }
+            
+            // If not found, use first document
+            if (docs.length > 0 && docs[0].document_number) {
               hasNavigatedRef.current = true
-              navigate(`/${project.id}/${doc.id}`, { replace: true })
-              return
-            } else if (docs.length > 0) {
-              hasNavigatedRef.current = true
-              navigate(`/${project.id}/${docs[0].id}`, { replace: true })
+              navigate(`/${project.id}/${docs[0].document_number}`, { replace: true })
               return
             }
           }
@@ -61,9 +65,9 @@ export default function HomePage() {
         if (projects.length > 0) {
           const firstProject = projects[0]
           const docs = await getDocuments(firstProject.id)
-          if (docs.length > 0) {
+          if (docs.length > 0 && docs[0].document_number) {
             hasNavigatedRef.current = true
-            navigate(`/${firstProject.id}/${docs[0].id}`, { replace: true })
+            navigate(`/${firstProject.id}/${docs[0].document_number}`, { replace: true })
             return
           }
         }
@@ -72,9 +76,9 @@ export default function HomePage() {
         if (loading || authLoading) {
           return
         }
-        if (project && documents.length > 0) {
+        if (project && documents.length > 0 && documents[0].document_number) {
           hasNavigatedRef.current = true
-          navigate(`/${project.id}/${documents[0].id}`, { replace: true })
+          navigate(`/${project.id}/${documents[0].document_number}`, { replace: true })
         }
       }
     }

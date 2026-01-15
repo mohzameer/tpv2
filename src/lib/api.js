@@ -200,6 +200,25 @@ export async function getDocument(documentId) {
   return data
 }
 
+// Get document by project_id and document_number
+// Works for both text and drawing documents
+export async function getDocumentByNumber(projectId, documentNumber) {
+  const { data, error } = await supabase
+    .from('documents')
+    .select('*')
+    .eq('project_id', projectId)
+    .eq('document_number', documentNumber)
+    .single()
+  
+  if (error) {
+    if (error.code === 'PGRST116') {
+      return null
+    }
+    throw error
+  }
+  return data
+}
+
 export async function createDocument(projectId, title, documentType = 'text') {
   const { data, error } = await supabase
     .from('documents')

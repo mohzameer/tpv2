@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { getProjects, createProject, getDocuments, createDocument, deleteProject } from '../lib/api'
-import { getLastVisited, setLastVisited, getLastDocumentForProject } from '../lib/lastVisited'
+import { getLastVisited, getLastDocumentNumberForProject, setLastVisitedDocumentNumber } from '../lib/lastVisited'
 import { supabase } from '../lib/supabase'
 
 export function useProject() {
@@ -194,24 +194,24 @@ export function useProject() {
       }
       setDocuments(docs)
       
-      // Get the last visited document for this project
-      const lastDocId = getLastDocumentForProject(projectId)
-      let targetDocId = docs[0].id
+      // Try to find by document number
+      const lastDocNumber = getLastDocumentNumberForProject(projectId)
+      let targetDoc = docs[0]
       
-      // If we have a last document for this project and it still exists, use it
-      // Compare as strings to handle type mismatches
-      if (lastDocId) {
-        const lastDocIdStr = String(lastDocId)
-        const lastDoc = docs.find(d => String(d.id) === lastDocIdStr)
-        if (lastDoc) {
-          targetDocId = lastDoc.id
+      if (lastDocNumber) {
+        const foundDoc = docs.find(d => d.document_number === lastDocNumber)
+        if (foundDoc) {
+          targetDoc = foundDoc
         }
       }
       
       // Persist the project selection with the target document
-      await setLastVisited(targetProject.id, targetDocId)
+      // Store document number (works for both text and drawing documents)
+      if (targetDoc.document_number) {
+        setLastVisitedDocumentNumber(targetProject.id, targetDoc.document_number)
+      }
       
-      return targetDocId
+      return targetDoc.document_number
     } catch (err) {
       console.error('Failed to switch project:', err)
       setLoading(false)

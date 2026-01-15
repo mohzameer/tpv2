@@ -4,7 +4,7 @@ import { Modal, Stack, Group, Text, ActionIcon, TextInput, Box, Loader, Center, 
 import { IconFolder, IconPlus, IconCheck, IconX, IconFile, IconBrush, IconTrash, IconChevronLeft, IconPencil } from '@tabler/icons-react'
 import { useProjectContext } from '../context/ProjectContext'
 import { getProjects, createProject, getDocuments, updateDocument, deleteDocument, createDocument } from '../lib/api'
-import { getLastDocumentForProject } from '../lib/lastVisited'
+import { getLastDocumentNumberForProject, setLastVisitedDocumentNumber } from '../lib/lastVisited'
 import { isDrawing } from '../lib/documentType'
 import './Sidebar.css'
 
@@ -99,8 +99,18 @@ export default function ProjectsModal({ opened, onClose }) {
 
   async function handleSelectDocument(doc) {
     if (!selectedProject) return
+    
+    // Store document number (works for both text and drawing documents)
+    if (doc.document_number) {
+      setLastVisitedDocumentNumber(selectedProject.id, doc.document_number)
+    }
+    
     onClose()
-    navigate(`/${selectedProject.id}/${doc.id}`)
+    
+    // Navigate to the selected document using document_number
+    navigate(`/${selectedProject.id}/${doc.document_number}`)
+    
+    // If switching to a different project, update the project context
     if (selectedProject.id !== project?.id) {
       await switchProject(selectedProject.id)
     }
@@ -112,8 +122,10 @@ export default function ProjectsModal({ opened, onClose }) {
     try {
       const doc = await createDocument(selectedProject.id, title, documentType)
       await loadDocuments(selectedProject.id)
-      if (doc) {
-        navigate(`/${selectedProject.id}/${doc.id}`)
+      if (doc && doc.document_number) {
+        // Store document number when navigating to new document (works for both text and drawing documents)
+        setLastVisitedDocumentNumber(selectedProject.id, doc.document_number)
+        navigate(`/${selectedProject.id}/${doc.document_number}`)
         onClose()
       }
     } catch (err) {
@@ -150,7 +162,8 @@ export default function ProjectsModal({ opened, onClose }) {
   async function handleDelete() {
     if (!deleteConfirm || !selectedProject || documents.length <= 1) return
     
-    const deletingCurrentDoc = String(docId) === String(deleteConfirm.id)
+    // docId in URL is now document_number
+    const deletingCurrentDoc = docId && parseInt(docId, 10) === deleteConfirm.document_number
     await deleteDocument(deleteConfirm.id)
     await loadDocuments(selectedProject.id)
     if (refreshDocuments) {
@@ -160,8 +173,8 @@ export default function ProjectsModal({ opened, onClose }) {
     
     if (deletingCurrentDoc && selectedProject) {
       const remaining = documents.filter(d => d.id !== deleteConfirm.id)
-      if (remaining.length > 0) {
-        navigate(`/${selectedProject.id}/${remaining[0].id}`)
+      if (remaining.length > 0 && remaining[0].document_number) {
+        navigate(`/${selectedProject.id}/${remaining[0].document_number}`)
         onClose()
       }
     }
@@ -224,11 +237,11 @@ export default function ProjectsModal({ opened, onClose }) {
         </Group>
       }
       centered
-      size={selectedProject ? "500px" : "400px"}
+      size="600px"
       styles={{
         body: { 
           padding: 0,
-          maxHeight: '70vh',
+          height: '600px',
           overflow: 'hidden',
           display: 'flex',
           flexDirection: 'column',
@@ -236,6 +249,10 @@ export default function ProjectsModal({ opened, onClose }) {
         content: {
           display: 'flex',
           flexDirection: 'column',
+          height: '600px',
+          width: '600px',
+          maxWidth: '600px',
+          minWidth: '600px',
         },
       }}
     >
@@ -253,7 +270,8 @@ export default function ProjectsModal({ opened, onClose }) {
           ) : (
             <div className="sidebar-documents-grid">
               {sortedDocuments.map((doc) => {
-                const isActive = docId !== undefined && String(docId) === String(doc.id)
+                // docId in URL is now document_number
+                const isActive = docId !== undefined && parseInt(docId, 10) === doc.document_number
                 return (
                   <Box
                     key={doc.id}
@@ -329,13 +347,13 @@ export default function ProjectsModal({ opened, onClose }) {
         </Box>
       ) : (
         // Projects view
-        <Box style={{ flex: 1, overflowY: 'auto', padding: '12px', height: 0 }}>
+        <Box style={{ flex: 1, overflowY: 'auto', padding: '12px', height: 0, width: '100%' }}>
           {loading ? (
             <Center py="xl">
               <Loader size="sm" />
             </Center>
           ) : (
-            <Stack gap="xs">
+            <Stack gap="xs" style={{ width: '100%' }}>
               {projects.map((p) => (
                 <Box
                   key={p.id}
@@ -343,10 +361,11 @@ export default function ProjectsModal({ opened, onClose }) {
                   p="sm"
                   className="sidebar-item"
                   data-active={p.id === project?.id}
+                  style={{ width: '100%', boxSizing: 'border-box' }}
                 >
-                  <Group gap="sm">
-                    <IconFolder size={18} color="var(--mantine-color-gray-6)" />
-                    <Text size="sm" fw={p.id === project?.id ? 500 : 400}>{p.name}</Text>
+                  <Group gap="sm" wrap="nowrap">
+                    <IconFolder size={18} color="var(--mantine-color-gray-6)" style={{ flexShrink: 0 }} />
+                    <Text size="sm" fw={p.id === project?.id ? 500 : 400} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{p.name}</Text>
                   </Group>
                 </Box>
               ))}
@@ -383,9 +402,10 @@ export default function ProjectsModal({ opened, onClose }) {
                   onClick={() => setAdding(true)}
                   p="sm"
                   className="sidebar-item"
+                  style={{ width: '100%', boxSizing: 'border-box' }}
                 >
-                  <Group gap="sm">
-                    <IconPlus size={18} color="var(--mantine-color-gray-6)" />
+                  <Group gap="sm" wrap="nowrap">
+                    <IconPlus size={18} color="var(--mantine-color-gray-6)" style={{ flexShrink: 0 }} />
                     <Text size="sm" c="dimmed">New project</Text>
                   </Group>
                 </Box>
