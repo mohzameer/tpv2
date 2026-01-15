@@ -1061,12 +1061,12 @@ export default function NotesPanel({ docId }) {
           style={{
             backgroundColor: colorScheme === 'dark' ? 'var(--mantine-color-dark-7)' : '#ffffff',
             minHeight: isMobile ? '800px' : '1200px',
-            paddingTop: isMobile ? '16px' : '24px',
-            paddingLeft: isMobile ? '12px' : '16px',
-            paddingRight: isMobile ? '12px' : '24px',
+            paddingTop: isMobile ? '8px' : '24px',
+            paddingLeft: isMobile ? '2px' : '16px', // Minimal padding on mobile
+            paddingRight: isMobile ? '2px' : '24px', // Minimal padding on mobile
             paddingBottom: isMobile ? '200px' : '400px',
             border: colorScheme === 'dark' ? '1px solid var(--mantine-color-dark-4)' : '1px solid #e0e0e0',
-            borderRadius: '5px',
+            borderRadius: isMobile ? '0' : '5px', // No border radius on mobile for edge-to-edge feel
             position: 'relative', // Make container relative for absolute positioned buttons
             width: '100%',
             maxWidth: '100%',
@@ -1075,7 +1075,8 @@ export default function NotesPanel({ docId }) {
         >
           <Box
             style={{
-              paddingLeft: isMobile ? '0.5rem' : '2.25rem', // Extra left padding to make room for buttons (32px button + 8px gap - 4px spacing)
+              paddingLeft: isMobile ? '0' : '2.25rem', // No left padding on mobile to hug buttons
+              paddingRight: isMobile ? '0' : '0', // No right padding on mobile
               width: '100%',
               maxWidth: '100%',
               boxSizing: 'border-box',
