@@ -716,7 +716,7 @@ function FloatingCopyButton({ editor }) {
     position: 'fixed',
     top: finalTop,
     left: buttonLeft,
-    zIndex: 1000,
+    zIndex: 100, // Lower than modals (which use 200+) but above normal content
     opacity,
     transition: 'opacity 120ms ease',
     pointerEvents: opacity > 0 ? 'auto' : 'none',

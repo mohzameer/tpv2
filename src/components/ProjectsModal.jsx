@@ -8,6 +8,23 @@ import { getLastDocumentNumberForProject, setLastVisitedDocumentNumber } from '.
 import { isDrawing } from '../lib/documentType'
 import './Sidebar.css'
 
+// Hook to detect mobile viewport
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(false)
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth <= 768)
+    }
+    
+    checkMobile()
+    window.addEventListener('resize', checkMobile)
+    return () => window.removeEventListener('resize', checkMobile)
+  }, [])
+
+  return isMobile
+}
+
 function formatDate(dateString) {
   if (!dateString) return ''
   const date = new Date(dateString)
@@ -36,6 +53,7 @@ export default function ProjectsModal({ opened, onClose }) {
   const [editingId, setEditingId] = useState(null)
   const [editingTitle, setEditingTitle] = useState('')
   const [deleteConfirm, setDeleteConfirm] = useState(null)
+  const isMobile = useIsMobile()
 
   useEffect(() => {
     if (opened) {
@@ -189,30 +207,53 @@ export default function ProjectsModal({ opened, onClose }) {
       opened={opened} 
       onClose={onClose} 
       title={
-        <Group justify="space-between" style={{ width: '100%' }}>
+        <Group justify="space-between" style={{ width: '100%' }} wrap="nowrap">
           {selectedProject ? (
-            <Group gap="xs">
+            <Group gap="xs" wrap="nowrap" style={{ minWidth: 0, flex: 1 }}>
               <ActionIcon 
                 variant="subtle" 
                 color="gray" 
                 size="sm"
                 onClick={() => setSelectedProject(null)}
+                style={{ flexShrink: 0 }}
               >
                 <IconChevronLeft size={16} />
               </ActionIcon>
-              <Text fw={500} size="sm">{selectedProject.name}</Text>
+              <Text 
+                fw={500} 
+                size="sm"
+                style={{ 
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  minWidth: 0,
+                }}
+              >
+                {selectedProject.name}
+              </Text>
             </Group>
           ) : (
-            <Text fw={500} size="sm">Projects</Text>
+            <Text fw={500} size="sm" style={{ flex: 1 }}>Projects</Text>
           )}
           {selectedProject && (
-            <Group gap="xs">
+            <Group gap="xs" wrap="nowrap" style={{ flexShrink: 0 }}>
               <Menu shadow="md" position="bottom-end">
                 <Menu.Target>
                   <Button
                     variant="outline"
                     size="xs"
                     leftSection={<IconPlus size={14} />}
+                    sx={{
+                      '@media (max-width: 768px)': {
+                        paddingLeft: '8px',
+                        paddingRight: '8px',
+                        '& .mantine-Button-inner': {
+                          '& > span:not(:first-child)': {
+                            display: 'none',
+                          },
+                        },
+                      },
+                    }}
                   >
                     New document
                   </Button>
@@ -237,11 +278,11 @@ export default function ProjectsModal({ opened, onClose }) {
         </Group>
       }
       centered
-      size="600px"
+      size={isMobile ? "100%" : "600px"}
       styles={{
         body: { 
           padding: 0,
-          height: '600px',
+          height: isMobile ? '90vh' : '600px',
           overflow: 'hidden',
           display: 'flex',
           flexDirection: 'column',
@@ -249,10 +290,11 @@ export default function ProjectsModal({ opened, onClose }) {
         content: {
           display: 'flex',
           flexDirection: 'column',
-          height: '600px',
-          width: '600px',
-          maxWidth: '600px',
-          minWidth: '600px',
+          height: isMobile ? '90vh' : '600px',
+          width: isMobile ? '100%' : '600px',
+          maxWidth: isMobile ? '100%' : '600px',
+          minWidth: isMobile ? '0' : '600px',
+          margin: isMobile ? '5vh auto' : undefined,
         },
       }}
     >
