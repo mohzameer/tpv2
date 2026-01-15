@@ -35,6 +35,23 @@ function useIsMobile() {
   return isMobile
 }
 
+// Hook to detect tablet viewport
+function useIsTablet() {
+  const [isTablet, setIsTablet] = useState(false)
+
+  useEffect(() => {
+    const checkTablet = () => {
+      setIsTablet(window.innerWidth > 768 && window.innerWidth <= 1024)
+    }
+    
+    checkTablet()
+    window.addEventListener('resize', checkTablet)
+    return () => window.removeEventListener('resize', checkTablet)
+  }, [])
+
+  return isTablet
+}
+
 // Only keep markdown-compatible block types
 const { 
   audio, video, file, image, // remove media blocks
@@ -787,6 +804,7 @@ function FloatingCopyButton({ editor }) {
 
 export default function NotesPanel({ docId }) {
   const isMobile = useIsMobile()
+  const isTablet = useIsTablet()
   const [loading, setLoading] = useState(true)
   const editor = useCreateBlockNote({ schema, initialContent: defaultBlocks })
   const saveTimeout = useRef(null)
@@ -1022,10 +1040,10 @@ export default function NotesPanel({ docId }) {
         style={{ 
           flex: 1, 
           overflow: 'auto', 
-          paddingTop: isMobile ? '1rem' : '3rem',
-          paddingLeft: isMobile ? '1rem' : '12.5rem', // ~200px at default font size, scales with rem
-          paddingRight: isMobile ? '1rem' : '12.5rem',
-          paddingBottom: isMobile ? '1rem' : '3rem',
+          paddingTop: isMobile ? '1rem' : (isTablet ? '2rem' : '3rem'),
+          paddingLeft: isMobile ? '1rem' : (isTablet ? '2rem' : '12.5rem'), // ~200px at default font size, scales with rem
+          paddingRight: isMobile ? '1rem' : (isTablet ? '2rem' : '12.5rem'),
+          paddingBottom: isMobile ? '1rem' : (isTablet ? '2rem' : '3rem'),
           scrollbarWidth: 'none', /* Firefox */
           msOverflowStyle: 'none', /* IE and Edge */
           width: '100%',
@@ -1035,10 +1053,6 @@ export default function NotesPanel({ docId }) {
         sx={{
           '&::-webkit-scrollbar': {
             display: 'none', /* Chrome, Safari, Opera */
-          },
-          '@media (min-width: 769px) and (max-width: 1024px)': {
-            paddingLeft: '4rem',
-            paddingRight: '4rem',
           },
         }}
       >
