@@ -1,27 +1,32 @@
-import { Group, ActionIcon, Loader, Text, TextInput, Menu } from '@mantine/core'
-import { IconSun, IconMoon, IconUser, IconCloud, IconSettings, IconLogout, IconLogin, IconFolder, IconHelp } from '@tabler/icons-react'
+import { Group, ActionIcon, Loader, Text, TextInput, Menu, Button } from '@mantine/core'
+import { IconSun, IconMoon, IconUser, IconCloud, IconSettings, IconLogout, IconLogin, IconFolder, IconHelp, IconFileImport } from '@tabler/icons-react'
 import { useTheme } from '../context/ThemeContext'
 import { useSync } from '../context/SyncContext'
 import { useProjectContext } from '../context/ProjectContext'
 import { useAuth } from '../context/AuthContext'
+import { useEditor } from '../context/EditorContext'
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import LoginModal from './LoginModal'
 import ProjectsModal from './ProjectsModal'
 import HelpModal from './HelpModal'
+import MarkdownImportModal from './MarkdownImportModal'
 
 export default function Header() {
   const { colorScheme, toggleColorScheme } = useTheme()
   const { isSyncing } = useSync()
   const { project, refreshDocuments } = useProjectContext()
   const { user, signOut } = useAuth()
+  const { editor } = useEditor()
   const navigate = useNavigate()
+  const { docId } = useParams()
   const [editing, setEditing] = useState(false)
   const [projectName, setProjectName] = useState('')
   const [showLoginModal, setShowLoginModal] = useState(false)
   const [showProjectsModal, setShowProjectsModal] = useState(false)
   const [showHelpModal, setShowHelpModal] = useState(false)
+  const [showImportModal, setShowImportModal] = useState(false)
 
   function handleDoubleClick() {
     if (project) {
@@ -41,6 +46,39 @@ export default function Header() {
   function handleKeyDown(e) {
     if (e.key === 'Enter') handleSave()
     else if (e.key === 'Escape') setEditing(false)
+  }
+
+  async function handleMarkdownImport(markdownText, mode) {
+    if (!editor || !docId) {
+      alert('Editor not available. Please open a document first.')
+      return
+    }
+
+    try {
+      const blocks = await editor.tryParseMarkdownToBlocks(markdownText)
+      
+      if (!blocks || blocks.length === 0) {
+        alert('No content found in markdown file.')
+        return
+      }
+      
+      if (mode === 'replace') {
+        // Replace all existing content
+        editor.replaceBlocks(editor.document, blocks)
+      } else {
+        // Merge: append to existing content
+        const currentBlocks = editor.document
+        if (currentBlocks && currentBlocks.length > 0) {
+          editor.insertBlocks(blocks, currentBlocks[currentBlocks.length - 1].id, 'after')
+        } else {
+          // If no existing blocks, just replace
+          editor.replaceBlocks(editor.document, blocks)
+        }
+      }
+    } catch (err) {
+      console.error('Failed to import markdown:', err)
+      alert('Failed to import markdown. Please try again.')
+    }
   }
 
   return (
@@ -96,6 +134,28 @@ export default function Header() {
       </Group>
 
       <Group gap="xs">
+        {docId && (
+          <Button
+            variant="subtle"
+            onClick={() => setShowImportModal(true)}
+            size="xs"
+            leftSection={<IconFileImport size={16} />}
+            styles={{
+              root: {
+                height: '36px',
+                paddingLeft: '12px',
+                paddingRight: '12px',
+                fontWeight: 500,
+                color: colorScheme === 'dark' ? '#9ca3af' : '#6b7280',
+                '&:hover': {
+                  backgroundColor: colorScheme === 'dark' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)',
+                },
+              },
+            }}
+          >
+            md
+          </Button>
+        )}
         <ActionIcon variant="transparent" size="lg" style={{ cursor: 'default' }}>
           {isSyncing ? (
             <Loader size={18} color={colorScheme === 'dark' ? '#9ca3af' : '#6b7280'} />
@@ -151,6 +211,11 @@ export default function Header() {
         </Menu>
         <LoginModal opened={showLoginModal} onClose={() => setShowLoginModal(false)} />
         <HelpModal opened={showHelpModal} onClose={() => setShowHelpModal(false)} />
+        <MarkdownImportModal 
+          opened={showImportModal} 
+          onClose={() => setShowImportModal(false)}
+          onImport={handleMarkdownImport}
+        />
       </Group>
     </Group>
   )

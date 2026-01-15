@@ -10,6 +10,7 @@ import { getDocumentContent, updateDocumentContent } from '../lib/api'
 import { useTheme } from '../context/ThemeContext'
 import { useSync } from '../context/SyncContext'
 import { useAuth } from '../context/AuthContext'
+import { useEditor } from '../context/EditorContext'
 
 // Only keep markdown-compatible block types
 const { 
@@ -655,9 +656,20 @@ export default function NotesPanel({ docId }) {
   const lastSavedContent = useRef(null)
   const { colorScheme } = useTheme()
   const { setIsSyncing } = useSync()
+  const { setEditor } = useEditor()
 
   // Load content when docId changes or when auth state changes (user logs in/out)
   const { user } = useAuth()
+
+  // Provide editor to context
+  useEffect(() => {
+    if (editor) {
+      setEditor(editor)
+    }
+    return () => {
+      setEditor(null)
+    }
+  }, [editor, setEditor])
   
   useEffect(() => {
     if (!docId) return
