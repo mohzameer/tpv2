@@ -6,11 +6,16 @@ import { BlockNoteView } from '@blocknote/mantine'
 import '@blocknote/mantine/style.css'
 import './NotesPanel.css'
 import { useState, useEffect, useRef, useMemo } from 'react'
+import { createPortal } from 'react-dom'
 import { getDocumentContent, updateDocumentContent } from '../lib/api'
 import { useTheme } from '../context/ThemeContext'
 import { useSync } from '../context/SyncContext'
 import { useAuth } from '../context/AuthContext'
 import { useEditor } from '../context/EditorContext'
+import { useProjectContext } from '../context/ProjectContext'
+import { createDiagramRenderMap, getBlockPlainText } from '../lib/diagramPlaceholders'
+import DiagramRenderer from './DiagramRenderer'
+import DiagramPlaceholderBadge from './DiagramPlaceholderBadge'
 
 // Only keep markdown-compatible block types
 const { 
@@ -649,6 +654,370 @@ function FloatingCopyButton({ editor }) {
   )
 }
 
+// Component to render diagrams from placeholders
+// Renders diagrams as separate React components positioned after their blocks
+function DiagramPlaceholderRenderer({ editor, documents }) {
+  const [renderedDiagrams, setRenderedDiagrams] = useState(new Map())
+  const renderedDiagramsRef = useRef(new Map())
+  const diagramRenderMapRef = useRef(new Map())
+  const lastDocumentStringRef = useRef('')
+  const lastDocumentsStringRef = useRef('')
+  
+  // Update render map only when document or documents actually change
+  useEffect(() => {
+    if (!editor?.document || !documents) {
+      diagramRenderMapRef.current = new Map()
+      return
+    }
+    
+    // Create stable string representations for comparison
+    const docString = JSON.stringify(editor.document)
+    const docsString = JSON.stringify(documents.map(d => ({ 
+      id: d.id, 
+      title: d.title, 
+      document_type: d.document_type, 
+      document_number: d.document_number 
+    })))
+    
+    // Only recalculate if content actually changed
+    if (docString !== lastDocumentStringRef.current || 
+        docsString !== lastDocumentsStringRef.current) {
+      diagramRenderMapRef.current = createDiagramRenderMap(editor.document, documents)
+      lastDocumentStringRef.current = docString
+      lastDocumentsStringRef.current = docsString
+    }
+  }, [editor?.document, documents])
+  
+  const diagramRenderMap = diagramRenderMapRef.current
+  
+  useEffect(() => {
+    const diagramRenderMap = diagramRenderMapRef.current
+    if (!editor || diagramRenderMap.size === 0) {
+      // Clean up all containers
+      renderedDiagramsRef.current.forEach(({ container }) => {
+        if (container.parentNode) {
+          container.parentNode.removeChild(container)
+        }
+      })
+      renderedDiagramsRef.current.clear()
+      setRenderedDiagrams(new Map())
+      return
+    }
+    
+    const updateDiagrams = () => {
+      const editorEl = document.querySelector('.bn-editor')
+      if (!editorEl) {
+        console.log('[DiagramPlaceholder] No editor element found')
+        return
+      }
+      
+      const diagramRenderMap = diagramRenderMapRef.current
+      console.log('[DiagramPlaceholder] Render map size:', diagramRenderMap.size)
+      
+      const newRenderedDiagrams = new Map()
+      
+      // Process each placeholder - search for text directly in DOM
+      diagramRenderMap.forEach(({ placeholders, renderData, block }, blockId) => {
+        console.log('[DiagramPlaceholder] Processing block:', blockId, 'placeholders:', placeholders.length)
+        
+        placeholders.forEach((ph, index) => {
+          const { targetDocId, targetDoc, isDrawing, found, format, drawingKey } = renderData[index]
+          const diagramKey = `${blockId}-${index}-${drawingKey}`
+          const placeholderText = format === 'block' 
+            ? `:::diagram ${drawingKey}:::`
+            : `[diagram:${drawingKey}]`
+          
+          // Check if container already exists
+          const existingContainer = editorEl.querySelector(`[data-diagram-container="${diagramKey}"]`)
+          if (existingContainer) {
+            console.log('[DiagramPlaceholder] Container already exists for:', diagramKey)
+            newRenderedDiagrams.set(diagramKey, {
+              container: existingContainer,
+              docId: targetDocId || null,
+              targetDoc: targetDoc || null,
+              isDrawing: !!isDrawing,
+              format,
+              drawingKey,
+              blockId,
+              found
+            })
+            return
+          }
+          
+          // Search for any element containing the placeholder text
+          const allElements = editorEl.querySelectorAll('*')
+          let targetElement = null
+          
+          for (const el of allElements) {
+            if (el.textContent && el.textContent.includes(placeholderText)) {
+              // Check if this is a paragraph or block-level element
+              if (format === 'block' && (el.tagName === 'P' || el.getAttribute('data-node-type') === 'paragraph')) {
+                if (el.textContent.trim() === placeholderText.trim() || el.textContent.includes(placeholderText)) {
+                  targetElement = el
+                  break
+                }
+              } else if (format === 'inline') {
+                targetElement = el
+                break
+              }
+            }
+          }
+          
+          if (!targetElement) {
+            console.log('[DiagramPlaceholder] Could not find element containing:', placeholderText)
+            return
+          }
+          
+          console.log('[DiagramPlaceholder] Found target element:', targetElement, 'text:', targetElement.textContent?.substring(0, 100))
+          
+          // Create container
+          const container = document.createElement('div')
+          container.setAttribute('data-diagram-container', diagramKey)
+          container.setAttribute('data-diagram-key', drawingKey)
+          container.setAttribute('data-format', format)
+          
+          if (found && isDrawing && targetDocId) {
+            container.style.cssText = format === 'block' 
+              ? 'width: 100%; margin: 16px 0;'
+              : 'display: inline-block; margin: 0 4px; vertical-align: middle;'
+          } else {
+            container.style.cssText = format === 'block' 
+              ? 'display: inline-block; margin: 8px 0;'
+              : 'display: inline-block; margin: 0 4px; vertical-align: middle;'
+          }
+          
+          // Insert container
+          if (format === 'block' && targetElement.tagName === 'P' && targetElement.textContent.trim() === placeholderText.trim()) {
+            // Replace entire paragraph
+            targetElement.innerHTML = ''
+            targetElement.appendChild(container)
+            console.log('[DiagramPlaceholder] Replaced paragraph with container')
+          } else {
+            // Insert after target element
+            if (targetElement.parentNode) {
+              targetElement.parentNode.insertBefore(container, targetElement.nextSibling)
+              console.log('[DiagramPlaceholder] Inserted container after element')
+            }
+            
+            // Hide the placeholder text
+            if (targetElement.tagName === 'P' && targetElement.textContent.trim() === placeholderText.trim()) {
+              targetElement.style.display = 'none'
+            }
+          }
+          
+          newRenderedDiagrams.set(diagramKey, {
+            container,
+            docId: targetDocId || null,
+            targetDoc: targetDoc || null,
+            isDrawing: !!isDrawing,
+            format,
+            drawingKey,
+            blockId,
+            found
+          })
+        })
+      })
+        
+        placeholders.forEach((ph, index) => {
+          const { targetDocId, targetDoc, isDrawing, found, format, drawingKey } = renderData[index]
+          const diagramKey = `${blockId}-${index}-${drawingKey}`
+          
+          // Check if placeholder text exists in the block
+          const placeholderText = format === 'block' 
+            ? `:::diagram ${drawingKey}:::`
+            : `[diagram:${drawingKey}]`
+          
+          const blockText = blockEl.textContent || ''
+          if (!blockText.includes(placeholderText)) {
+            console.log('[DiagramPlaceholder] Placeholder text not found. Looking for:', placeholderText, 'in:', blockText.substring(0, 100))
+            return
+          }
+          
+          console.log('[DiagramPlaceholder] Found placeholder:', placeholderText, 'in block')
+          
+          // Check if we've already created a container for this diagram/badge/link
+          let container = blockEl.querySelector(`[data-diagram-container="${diagramKey}"]`)
+          
+          if (!container) {
+            // Create container element
+            container = document.createElement('div')
+            container.setAttribute('data-diagram-container', diagramKey)
+            container.setAttribute('data-diagram-key', drawingKey)
+            container.setAttribute('data-format', format)
+            
+            if (found && isDrawing && targetDocId) {
+              // Render embedded diagram for drawing documents
+              container.style.cssText = format === 'block' 
+                ? 'width: 100%; margin: 16px 0;'
+                : 'display: inline-block; margin: 0 4px; vertical-align: middle;'
+            } else {
+              // Render badge for missing or non-drawing documents
+              container.style.cssText = format === 'block' 
+                ? 'display: inline-block; margin: 8px 0;'
+                : 'display: inline-block; margin: 0 4px; vertical-align: middle;'
+            }
+            
+            // Insert container right after the block element
+            // For block format, try to replace the text in the paragraph
+            if (format === 'block') {
+              // Find the paragraph element containing the placeholder
+              const paragraphEl = blockEl.querySelector('p') || (blockEl.tagName === 'P' ? blockEl : null)
+              
+              if (paragraphEl && paragraphEl.textContent.trim() === placeholderText.trim()) {
+                // If the paragraph is ONLY the placeholder, replace it entirely
+                console.log('[DiagramPlaceholder] Replacing entire paragraph with container')
+                paragraphEl.innerHTML = ''
+                paragraphEl.appendChild(container)
+              } else {
+                // Otherwise, insert after the block
+                console.log('[DiagramPlaceholder] Inserting container after block')
+                if (blockEl.parentNode) {
+                  blockEl.parentNode.insertBefore(container, blockEl.nextSibling)
+                } else {
+                  blockEl.appendChild(container)
+                }
+                
+                // Try to hide the placeholder text
+                const walker = document.createTreeWalker(
+                  blockEl,
+                  NodeFilter.SHOW_TEXT,
+                  null
+                )
+                
+                let textNode = walker.nextNode()
+                while (textNode) {
+                  if (textNode.textContent.includes(placeholderText)) {
+                    const parent = textNode.parentNode
+                    if (parent && parent.tagName === 'P' && parent.textContent.trim() === placeholderText.trim()) {
+                      parent.style.display = 'none'
+                      console.log('[DiagramPlaceholder] Hid paragraph containing placeholder')
+                    }
+                    break
+                  }
+                  textNode = walker.nextNode()
+                }
+              }
+            } else {
+              // For inline, insert after the block
+              if (blockEl.parentNode) {
+                blockEl.parentNode.insertBefore(container, blockEl.nextSibling)
+              } else {
+                blockEl.appendChild(container)
+              }
+            }
+            
+            console.log('[DiagramPlaceholder] Container created and inserted:', container, 'parent:', container.parentNode)
+          }
+          
+          newRenderedDiagrams.set(diagramKey, {
+            container,
+            docId: targetDocId || null,
+            targetDoc: targetDoc || null,
+            isDrawing: !!isDrawing,
+            format,
+            drawingKey,
+            blockId,
+            found
+          })
+        })
+      })
+      
+      // Remove diagrams that are no longer needed
+      renderedDiagramsRef.current.forEach(({ container }, key) => {
+        if (!newRenderedDiagrams.has(key) && container.parentNode) {
+          container.parentNode.removeChild(container)
+        }
+      })
+      
+      // Only update state if something actually changed
+      const currentKeys = Array.from(renderedDiagramsRef.current.keys()).sort().join(',')
+      const newKeys = Array.from(newRenderedDiagrams.keys()).sort().join(',')
+      
+      if (currentKeys !== newKeys || renderedDiagramsRef.current.size !== newRenderedDiagrams.size) {
+        renderedDiagramsRef.current = new Map(newRenderedDiagrams)
+        setRenderedDiagrams(new Map(newRenderedDiagrams))
+      }
+    }
+    
+    // Run update after a delay to ensure DOM is ready
+    const timeoutId = setTimeout(updateDiagrams, 200)
+    
+    // Watch for DOM changes
+    const editorEl = document.querySelector('.bn-editor')
+    if (!editorEl) {
+      return () => clearTimeout(timeoutId)
+    }
+    
+    let isUpdating = false
+    const observer = new MutationObserver(() => {
+      if (isUpdating) return
+      isUpdating = true
+      clearTimeout(timeoutId)
+      setTimeout(() => {
+        updateDiagrams()
+        isUpdating = false
+      }, 100)
+    })
+    
+    observer.observe(editorEl, { 
+      childList: true, 
+      subtree: true,
+      characterData: true
+    })
+    
+    // Listen to editor changes (debounced)
+    let changeTimeout = null
+    const unsubscribe = editor.onChange(() => {
+      if (changeTimeout) clearTimeout(changeTimeout)
+      changeTimeout = setTimeout(() => {
+        if (!isUpdating) {
+          updateDiagrams()
+        }
+      }, 300)
+    })
+    
+    return () => {
+      clearTimeout(timeoutId)
+      if (changeTimeout) clearTimeout(changeTimeout)
+      observer.disconnect()
+      unsubscribe()
+    }
+  }, [editor, documents])
+  
+  // Render diagrams or badges into containers using portals
+  return (
+    <>
+      {Array.from(renderedDiagrams.entries()).map(([key, { container, docId, targetDoc, isDrawing, format, drawingKey, found }]) => {
+        if (!container) return null
+        
+        // Render embedded diagram for drawing documents
+        if (found && isDrawing && docId) {
+          return createPortal(
+            <DiagramRenderer 
+              key={key}
+              drawingDocId={docId} 
+              format={format}
+            />,
+            container
+          )
+        } else {
+          // Render badge for missing or non-drawing document references
+          return createPortal(
+            <DiagramPlaceholderBadge 
+              key={key}
+              drawingKey={drawingKey}
+              found={found}
+              format={format}
+              targetDoc={targetDoc}
+            />,
+            container
+          )
+        }
+      })}
+    </>
+  )
+}
+
 export default function NotesPanel({ docId }) {
   const [loading, setLoading] = useState(true)
   const editor = useCreateBlockNote({ schema, initialContent: defaultBlocks })
@@ -657,6 +1026,7 @@ export default function NotesPanel({ docId }) {
   const { colorScheme } = useTheme()
   const { setIsSyncing } = useSync()
   const { setEditor } = useEditor()
+  const { documents } = useProjectContext()
 
   // Load content when docId changes or when auth state changes (user logs in/out)
   const { user } = useAuth()
@@ -774,6 +1144,7 @@ export default function NotesPanel({ docId }) {
           }}
         >
           <BlockNoteView editor={editor} theme={colorScheme} onChange={handleChange} />
+          <DiagramPlaceholderRenderer editor={editor} documents={documents} />
         </Box>
         <FloatingCopyButton editor={editor} />
       </Box>
