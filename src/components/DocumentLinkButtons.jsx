@@ -65,7 +65,7 @@ function LinkButton({ link, containerRef, onDelete, index }) {
       : `0 1px 4px ${primaryColor}30`,
     opacity: isHovered ? 1 : 0.9,
     transition: 'opacity 150ms ease, background 150ms ease, box-shadow 150ms ease, border-color 150ms ease',
-    zIndex: 998,
+    zIndex: 10, // Lower than modals (200) but above normal content
     pointerEvents: 'auto',
   }
 

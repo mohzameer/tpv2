@@ -313,7 +313,6 @@ export async function getDocumentContent(documentId) {
   
   // If the query fails with PGRST204 (schema cache) or 400, try without document_links
   if (error && (error.code === 'PGRST204' || error.code === 'PGRST116')) {
-    console.warn('getDocumentContent: Failed to fetch with document_links, trying without it...', error.code)
     const { data: dataWithoutLinks, error: errorWithoutLinks } = await supabase
       .from('documents')
       .select('notes_content, drawing_content, drawing_files, text_mode')
@@ -363,11 +362,8 @@ export async function updateDocumentContent(documentId, { notes_content, drawing
   if (drawing_files !== undefined) updates.drawing_files = drawing_files
   if (document_links !== undefined) updates.document_links = document_links
   
-  console.log('updateDocumentContent called with:', { documentId, updates })
-  
   // If no updates, return early
   if (Object.keys(updates).length === 0) {
-    console.warn('updateDocumentContent: No updates provided')
     return { success: true }
   }
   
@@ -378,17 +374,8 @@ export async function updateDocumentContent(documentId, { notes_content, drawing
     .eq('id', documentId)
   
   if (error) {
-    console.error('updateDocumentContent error:', error)
-    console.error('Error code:', error.code)
-    console.error('Error message:', error.message)
-    console.error('Error details:', error.details)
-    console.error('Error hint:', error.hint)
-    
     // If it's a schema cache issue with document_links, don't throw - just warn
     if (error.code === 'PGRST204' && document_links !== undefined) {
-      console.warn('⚠️ document_links column not in PostgREST schema cache yet.')
-      console.warn('⚠️ Links will NOT be saved. Please refresh PostgREST cache (restart Supabase project).')
-      
       // Try updating other fields if there are any
       const updatesWithoutLinks = { ...updates }
       delete updatesWithoutLinks.document_links
@@ -400,10 +387,8 @@ export async function updateDocumentContent(documentId, { notes_content, drawing
           .eq('id', documentId)
         
         if (retryError) {
-          console.error('Retry without document_links also failed:', retryError)
           throw retryError
         } else {
-          console.warn('⚠️ Updated other fields, but document_links could not be saved.')
           return { success: false, document_links_skipped: true, error: 'PGRST204' }
         }
       } else {
@@ -415,18 +400,12 @@ export async function updateDocumentContent(documentId, { notes_content, drawing
     }
   }
   
-  console.log('updateDocumentContent success')
   return { success: true }
 }
 
 // Update document links
 export async function updateDocumentLinks(documentId, links) {
   try {
-    console.log('=== updateDocumentLinks START ===')
-    console.log('documentId:', documentId)
-    console.log('links to save:', JSON.stringify(links, null, 2))
-    console.log('links count:', links?.length)
-    console.log('links type:', typeof links, Array.isArray(links))
     
     const { data, error } = await supabase
       .from('documents')
@@ -436,24 +415,12 @@ export async function updateDocumentLinks(documentId, links) {
       .single()
     
     if (error) {
-      console.error('=== updateDocumentLinks ERROR ===')
-      console.error('Error code:', error.code)
-      console.error('Error message:', error.message)
-      console.error('Error details:', error)
       throw error
     }
     
-    console.log('=== updateDocumentLinks SUCCESS ===')
-    console.log('Returned data:', data)
-    console.log('Saved document_links:', data?.document_links)
-    console.log('Saved links count:', data?.document_links?.length)
     
     return data
   } catch (err) {
-    console.error('=== updateDocumentLinks EXCEPTION ===')
-    console.error('Exception:', err)
-    console.error('Exception message:', err?.message)
-    console.error('Exception stack:', err?.stack)
     throw err
   }
 }

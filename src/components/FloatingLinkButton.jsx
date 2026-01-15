@@ -150,9 +150,6 @@ export default function FloatingLinkButton({ containerRef, onLinkClick }) {
     if (onLinkClick) {
       onLinkClick(mousePosition)
     }
-
-    // Log for debugging (can be removed later)
-    console.log('Link button clicked at position:', mousePosition)
   }
 
   // Early return if not visible

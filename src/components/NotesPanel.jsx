@@ -693,13 +693,9 @@ export default function NotesPanel({ docId }) {
     try {
       const content = await getDocumentContent(docId)
       if (!content) {
-        // Document not found or error
-        console.error('Document content not found for docId:', docId)
         setLoading(false)
         return
       }
-      
-      console.log('Loaded content:', content) // Debug log
       
       // Load notes content
       // Check if notes_content exists and is a valid array
@@ -713,21 +709,17 @@ export default function NotesPanel({ docId }) {
           lastSavedContent.current = JSON.stringify(defaultBlocks)
         } else {
           // Invalid format - set default blocks
-          console.warn('Invalid notes_content format, using defaults')
           editor.replaceBlocks(editor.document, defaultBlocks)
           lastSavedContent.current = JSON.stringify(defaultBlocks)
         }
       } else {
         // No notes_content - set default blocks
-        console.warn('No notes_content found, using defaults')
         editor.replaceBlocks(editor.document, defaultBlocks)
         lastSavedContent.current = JSON.stringify(defaultBlocks)
       }
       
       // Load document links
-      console.log('Loading document_links:', content.document_links)
       if (content.document_links && Array.isArray(content.document_links)) {
-        console.log('Found', content.document_links.length, 'links to load')
         setLinks(content.document_links)
         // Update linkIdCounter to avoid ID conflicts
         if (content.document_links.length > 0) {
@@ -742,7 +734,6 @@ export default function NotesPanel({ docId }) {
           linkIdCounter.current = maxId + 1
         }
       } else {
-        console.log('No document_links found or not an array, setting empty array')
         setLinks([])
       }
       
@@ -762,56 +753,26 @@ export default function NotesPanel({ docId }) {
   
   async function saveLinks(linksToSave) {
     if (!docId) {
-      console.warn('=== saveLinks: Cannot save - no docId ===')
       return { success: false }
     }
     
-    console.log('=== saveLinks START ===')
-    console.log('docId:', docId)
-    console.log('linksToSave:', linksToSave)
-    console.log('linksToSave type:', typeof linksToSave, Array.isArray(linksToSave))
-    console.log('linksToSave JSON:', JSON.stringify(linksToSave, null, 2))
-    
     try {
       setIsSyncing(true)
-      
-      // Use updateDocumentContent instead - it handles all document fields including document_links
-      console.log('Calling updateDocumentContent with document_links...')
       const result = await updateDocumentContent(docId, { document_links: linksToSave })
       
-      console.log('=== saveLinks RESULT ===')
-      console.log('Result:', result)
-      
       if (result) {
-        if (result.success && !result.document_links_skipped) {
-          console.log('✅ Links save call completed!')
-          console.log('Links saved in database.')
-          return result
-        } else if (result.document_links_skipped) {
-          console.error('❌ Links could NOT be saved due to PostgREST schema cache issue.')
-          console.error('Please restart your Supabase project to refresh the cache.')
-          return result
-        }
+        return result
       } else {
-        console.warn('⚠️ Links save returned null')
         return { success: false }
       }
     } catch (err) {
-      console.error('=== saveLinks ERROR ===')
-      console.error('Error saving links:', err)
-      console.error('Error message:', err?.message)
-      console.error('Error code:', err?.code)
-      console.error('Error details:', err)
-      
       // If it's a schema cache issue, return error info
       if (err?.code === 'PGRST204') {
-        console.warn('⚠️ PostgREST schema cache issue - links could NOT be saved')
         return { success: false, document_links_skipped: true, error: 'PGRST204' }
       }
       return { success: false, error: err }
     } finally {
       setIsSyncing(false)
-      console.log('=== saveLinks END ===')
     }
   }
   
@@ -827,8 +788,6 @@ export default function NotesPanel({ docId }) {
       const adjustment = findNearestNonOverlappingY(position.y, links, buttonSize, spacing)
       if (adjustment !== null && Math.abs(adjustment) < buttonSize * 10) {
         createLink(selectedDocument, position, adjustment)
-      } else {
-        console.log('Cannot add link - too crowded in this area')
       }
     } else {
       createLink(selectedDocument, position, 0)
@@ -859,7 +818,6 @@ export default function NotesPanel({ docId }) {
     // If save failed due to cache issue, remove the link from state
     if (result && result.document_links_skipped) {
       setLinks(links) // Revert to previous state
-      console.error('Link was not saved and has been removed from UI. Please restart Supabase project and try again.')
     }
   }
   
@@ -871,7 +829,6 @@ export default function NotesPanel({ docId }) {
     // If save failed due to cache issue, revert the deletion
     if (result && result.document_links_skipped) {
       setLinks(links) // Revert to previous state
-      console.error('Link deletion was not saved. Please restart Supabase project and try again.')
     }
   }
 
@@ -889,9 +846,7 @@ export default function NotesPanel({ docId }) {
     
     try {
       setIsSyncing(true)
-      console.log('Saving content for docId:', docId, 'Content:', editor.document) // Debug log
-      const result = await updateDocumentContent(docId, { notes_content: editor.document })
-      console.log('Save result:', result) // Debug log
+      await updateDocumentContent(docId, { notes_content: editor.document })
       lastSavedContent.current = currentContent
     } catch (err) {
       console.error('Failed to save notes:', err)
