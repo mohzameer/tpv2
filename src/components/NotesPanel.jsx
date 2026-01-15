@@ -6,11 +6,16 @@ import { BlockNoteView } from '@blocknote/mantine'
 import '@blocknote/mantine/style.css'
 import './NotesPanel.css'
 import { useState, useEffect, useRef, useMemo } from 'react'
-import { getDocumentContent, updateDocumentContent } from '../lib/api'
+import { getDocumentContent, updateDocumentContent, updateDocumentLinks } from '../lib/api'
 import { useTheme } from '../context/ThemeContext'
 import { useSync } from '../context/SyncContext'
 import { useAuth } from '../context/AuthContext'
 import { useEditor } from '../context/EditorContext'
+import FloatingLinkButton from './FloatingLinkButton'
+import DocumentLinkButtons, { checkOverlap, findNearestNonOverlappingY } from './DocumentLinkButtons'
+import DocumentLinkModal from './DocumentLinkModal'
+import { useProjectContext } from '../context/ProjectContext'
+import { isDrawing } from '../lib/documentType'
 
 // Only keep markdown-compatible block types
 const { 
@@ -654,9 +659,16 @@ export default function NotesPanel({ docId }) {
   const editor = useCreateBlockNote({ schema, initialContent: defaultBlocks })
   const saveTimeout = useRef(null)
   const lastSavedContent = useRef(null)
+  const whiteBackgroundRef = useRef(null)
+  const [links, setLinks] = useState([]) // Store document/drawing links
+  const [linkModalOpened, setLinkModalOpened] = useState(false)
+  const [pendingLinkPosition, setPendingLinkPosition] = useState(null)
+  const linkIdCounter = useRef(0) // Counter for generating unique link IDs
+  const isAddingLinkRef = useRef(false) // Prevent multiple button creation
   const { colorScheme } = useTheme()
   const { setIsSyncing } = useSync()
   const { setEditor } = useEditor()
+  const { project } = useProjectContext()
 
   // Load content when docId changes or when auth state changes (user logs in/out)
   const { user } = useAuth()
@@ -680,14 +692,60 @@ export default function NotesPanel({ docId }) {
   async function loadContent() {
     try {
       const content = await getDocumentContent(docId)
-      if (content?.notes_content && Array.isArray(content.notes_content) && content.notes_content.length > 0) {
-        editor.replaceBlocks(editor.document, content.notes_content)
-        lastSavedContent.current = JSON.stringify(content.notes_content)
+      if (!content) {
+        // Document not found or error
+        console.error('Document content not found for docId:', docId)
+        setLoading(false)
+        return
+      }
+      
+      console.log('Loaded content:', content) // Debug log
+      
+      // Load notes content
+      // Check if notes_content exists and is a valid array
+      if (content.notes_content !== null && content.notes_content !== undefined) {
+        if (Array.isArray(content.notes_content) && content.notes_content.length > 0) {
+          editor.replaceBlocks(editor.document, content.notes_content)
+          lastSavedContent.current = JSON.stringify(content.notes_content)
+        } else if (Array.isArray(content.notes_content) && content.notes_content.length === 0) {
+          // Empty array - set default blocks
+          editor.replaceBlocks(editor.document, defaultBlocks)
+          lastSavedContent.current = JSON.stringify(defaultBlocks)
+        } else {
+          // Invalid format - set default blocks
+          console.warn('Invalid notes_content format, using defaults')
+          editor.replaceBlocks(editor.document, defaultBlocks)
+          lastSavedContent.current = JSON.stringify(defaultBlocks)
+        }
       } else {
-        // Set default blocks for new document
+        // No notes_content - set default blocks
+        console.warn('No notes_content found, using defaults')
         editor.replaceBlocks(editor.document, defaultBlocks)
         lastSavedContent.current = JSON.stringify(defaultBlocks)
       }
+      
+      // Load document links
+      console.log('Loading document_links:', content.document_links)
+      if (content.document_links && Array.isArray(content.document_links)) {
+        console.log('Found', content.document_links.length, 'links to load')
+        setLinks(content.document_links)
+        // Update linkIdCounter to avoid ID conflicts
+        if (content.document_links.length > 0) {
+          const maxId = content.document_links.reduce((max, link) => {
+            const match = link.id?.match(/link-(\d+)/)
+            if (match) {
+              const num = parseInt(match[1], 10)
+              return Math.max(max, num)
+            }
+            return max
+          }, 0)
+          linkIdCounter.current = maxId + 1
+        }
+      } else {
+        console.log('No document_links found or not an array, setting empty array')
+        setLinks([])
+      }
+      
       // Focus on second block
       setTimeout(() => {
         const blocks = editor.document
@@ -699,6 +757,121 @@ export default function NotesPanel({ docId }) {
       console.error('Failed to load notes:', err)
     } finally {
       setLoading(false)
+    }
+  }
+  
+  async function saveLinks(linksToSave) {
+    if (!docId) {
+      console.warn('=== saveLinks: Cannot save - no docId ===')
+      return { success: false }
+    }
+    
+    console.log('=== saveLinks START ===')
+    console.log('docId:', docId)
+    console.log('linksToSave:', linksToSave)
+    console.log('linksToSave type:', typeof linksToSave, Array.isArray(linksToSave))
+    console.log('linksToSave JSON:', JSON.stringify(linksToSave, null, 2))
+    
+    try {
+      setIsSyncing(true)
+      
+      // Use updateDocumentContent instead - it handles all document fields including document_links
+      console.log('Calling updateDocumentContent with document_links...')
+      const result = await updateDocumentContent(docId, { document_links: linksToSave })
+      
+      console.log('=== saveLinks RESULT ===')
+      console.log('Result:', result)
+      
+      if (result) {
+        if (result.success && !result.document_links_skipped) {
+          console.log('✅ Links save call completed!')
+          console.log('Links saved in database.')
+          return result
+        } else if (result.document_links_skipped) {
+          console.error('❌ Links could NOT be saved due to PostgREST schema cache issue.')
+          console.error('Please restart your Supabase project to refresh the cache.')
+          return result
+        }
+      } else {
+        console.warn('⚠️ Links save returned null')
+        return { success: false }
+      }
+    } catch (err) {
+      console.error('=== saveLinks ERROR ===')
+      console.error('Error saving links:', err)
+      console.error('Error message:', err?.message)
+      console.error('Error code:', err?.code)
+      console.error('Error details:', err)
+      
+      // If it's a schema cache issue, return error info
+      if (err?.code === 'PGRST204') {
+        console.warn('⚠️ PostgREST schema cache issue - links could NOT be saved')
+        return { success: false, document_links_skipped: true, error: 'PGRST204' }
+      }
+      return { success: false, error: err }
+    } finally {
+      setIsSyncing(false)
+      console.log('=== saveLinks END ===')
+    }
+  }
+  
+  function handleLinkSelected(selectedDocument) {
+    if (!pendingLinkPosition) return
+    
+    const buttonSize = 32
+    const spacing = 4
+    const position = pendingLinkPosition
+    
+    // Check if position would overlap
+    if (checkOverlap(position.y, links, buttonSize, spacing)) {
+      const adjustment = findNearestNonOverlappingY(position.y, links, buttonSize, spacing)
+      if (adjustment !== null && Math.abs(adjustment) < buttonSize * 10) {
+        createLink(selectedDocument, position, adjustment)
+      } else {
+        console.log('Cannot add link - too crowded in this area')
+      }
+    } else {
+      createLink(selectedDocument, position, 0)
+    }
+    
+    setPendingLinkPosition(null)
+    setLinkModalOpened(false)
+  }
+  
+  async function createLink(selectedDocument, position, adjustment) {
+    const linkType = isDrawing(selectedDocument) ? 'drawing' : 'document'
+    const newLink = {
+      id: `link-${linkIdCounter.current++}`,
+      targetDocumentId: selectedDocument.id,
+      targetDocumentNumber: selectedDocument.document_number,
+      type: linkType,
+      title: selectedDocument.title || (linkType === 'document' ? 'Untitled' : 'Untitled drawing'),
+      x: position.x,
+      y: position.y,
+      adjustedY: adjustment,
+      createdAt: new Date().toISOString(),
+    }
+    
+    const updatedLinks = [...links, newLink]
+    setLinks(updatedLinks)
+    const result = await saveLinks(updatedLinks)
+    
+    // If save failed due to cache issue, remove the link from state
+    if (result && result.document_links_skipped) {
+      setLinks(links) // Revert to previous state
+      console.error('Link was not saved and has been removed from UI. Please restart Supabase project and try again.')
+    }
+  }
+  
+  async function handleDeleteLink(linkId) {
+    const updatedLinks = links.filter(link => link.id !== linkId)
+    setLinks(updatedLinks)
+    const result = await saveLinks(updatedLinks)
+    
+    // If save failed due to cache issue, revert the deletion
+    if (result && result.document_links_skipped) {
+      setLinks(links) // Revert to previous state
+      console.error('Link deletion was not saved. Please restart Supabase project and try again.')
     }
   }
 
@@ -716,7 +889,9 @@ export default function NotesPanel({ docId }) {
     
     try {
       setIsSyncing(true)
-      await updateDocumentContent(docId, { notes_content: editor.document })
+      console.log('Saving content for docId:', docId, 'Content:', editor.document) // Debug log
+      const result = await updateDocumentContent(docId, { notes_content: editor.document })
+      console.log('Save result:', result) // Debug log
       lastSavedContent.current = currentContent
     } catch (err) {
       console.error('Failed to save notes:', err)
@@ -762,20 +937,59 @@ export default function NotesPanel({ docId }) {
         }}
       >
         <Box
+          ref={whiteBackgroundRef}
           style={{
             backgroundColor: colorScheme === 'dark' ? 'var(--mantine-color-dark-7)' : '#ffffff',
             minHeight: '1200px',
             paddingTop: '24px',
-            paddingLeft: '24px',
+            paddingLeft: '16px',
             paddingRight: '24px',
             paddingBottom: '400px',
             border: colorScheme === 'dark' ? '1px solid var(--mantine-color-dark-4)' : '1px solid #e0e0e0',
             borderRadius: '5px',
+            position: 'relative', // Make container relative for absolute positioned buttons
           }}
         >
-          <BlockNoteView editor={editor} theme={colorScheme} onChange={handleChange} />
+          <Box
+            style={{
+              paddingLeft: '36px', // Extra left padding to make room for buttons (32px button + 8px gap - 4px spacing)
+            }}
+          >
+            <BlockNoteView editor={editor} theme={colorScheme} onChange={handleChange} />
+          </Box>
+          <DocumentLinkButtons
+            containerRef={whiteBackgroundRef}
+            links={links}
+            onDeleteLink={handleDeleteLink}
+          />
         </Box>
         <FloatingCopyButton editor={editor} />
+        <FloatingLinkButton
+          containerRef={whiteBackgroundRef}
+          onLinkClick={(position) => {
+            // Prevent multiple button creation
+            if (isAddingLinkRef.current) return
+            isAddingLinkRef.current = true
+
+            // Store position and open modal
+            setPendingLinkPosition(position)
+            setLinkModalOpened(true)
+
+            // Reset flag after a short delay
+            setTimeout(() => {
+              isAddingLinkRef.current = false
+            }, 300)
+          }}
+        />
+        <DocumentLinkModal
+          opened={linkModalOpened}
+          onClose={() => {
+            setLinkModalOpened(false)
+            setPendingLinkPosition(null)
+          }}
+          onSelectDocument={handleLinkSelected}
+          currentDocumentId={docId ? docId : null}
+        />
       </Box>
     </Box>
   )
