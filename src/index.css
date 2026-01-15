@@ -6,4 +6,19 @@ html, body, #root {
   margin: 0;
   padding: 0;
   height: 100%;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+/* Ensure all containers respect mobile width */
+@media (max-width: 768px) {
+  * {
+    max-width: 100vw;
+  }
+  
+  body {
+    overflow-x: hidden;
+    position: relative;
+  }
 }

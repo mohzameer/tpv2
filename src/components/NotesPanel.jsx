@@ -18,6 +18,40 @@ import { useProjectContext } from '../context/ProjectContext'
 import { useShowLinks } from '../context/ShowLinksContext'
 import { isDrawing } from '../lib/documentType'
 
+// Hook to detect mobile viewport
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(false)
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth <= 768)
+    }
+    
+    checkMobile()
+    window.addEventListener('resize', checkMobile)
+    return () => window.removeEventListener('resize', checkMobile)
+  }, [])
+
+  return isMobile
+}
+
+// Hook to detect tablet viewport
+function useIsTablet() {
+  const [isTablet, setIsTablet] = useState(false)
+
+  useEffect(() => {
+    const checkTablet = () => {
+      setIsTablet(window.innerWidth > 768 && window.innerWidth <= 1024)
+    }
+    
+    checkTablet()
+    window.addEventListener('resize', checkTablet)
+    return () => window.removeEventListener('resize', checkTablet)
+  }, [])
+
+  return isTablet
+}
+
 // Only keep markdown-compatible block types
 const { 
   audio, video, file, image, // remove media blocks
@@ -282,6 +316,8 @@ function FloatingCopyButton({ editor }) {
   const [blockRect, setBlockRect] = useState(null)
   const [opacity, setOpacity] = useState(0)
   const [isPanelVisible, setIsPanelVisible] = useState(false) // Start as false, check on mount
+  const [isScrolling, setIsScrolling] = useState(false)
+  const isMobile = useIsMobile()
 
   // Determine which code block element to show toolbar for
   // Selection takes priority over hover
@@ -429,6 +465,13 @@ function FloatingCopyButton({ editor }) {
     }
 
     const updateRect = () => {
+      // On mobile, hide button while scrolling
+      if (isMobile && isScrolling) {
+        setOpacity(0)
+        setBlockRect(null)
+        return
+      }
+      
       // Double-check visibility before showing button
       const editorEl = document.querySelector('.bn-editor')
       if (!editorEl) {
@@ -455,8 +498,34 @@ function FloatingCopyButton({ editor }) {
         }
       }
 
+      if (!activeElement) {
+        setBlockRect(null)
+        setOpacity(0)
+        return
+      }
+
       const rect = activeElement.getBoundingClientRect()
       if (rect && rect.width > 0 && rect.height > 0) {
+        // On mobile, check if code block is actually visible in viewport (not just in editor bounds)
+        if (isMobile) {
+          const viewportHeight = window.innerHeight
+          const viewportTop = 0
+          const viewportBottom = viewportHeight
+          
+          // Check if code block is visible in viewport
+          const isInViewport = 
+            rect.top < viewportBottom &&
+            rect.bottom > viewportTop &&
+            rect.left < window.innerWidth &&
+            rect.right > 0
+          
+          if (!isInViewport) {
+            setBlockRect(null)
+            setOpacity(0)
+            return
+          }
+        }
+        
         // Verify the code block is actually within the visible editor bounds
         const isWithinEditor = 
           rect.left >= editorRect.left &&
@@ -466,7 +535,12 @@ function FloatingCopyButton({ editor }) {
         
         if (isWithinEditor) {
           setBlockRect(rect)
-          setOpacity(1)
+          // On mobile, only show if not scrolling and in viewport
+          if (!isMobile || (!isScrolling && rect.top >= 0 && rect.bottom <= window.innerHeight)) {
+            setOpacity(1)
+          } else {
+            setOpacity(0)
+          }
         } else {
           setBlockRect(null)
           setOpacity(0)
@@ -480,17 +554,68 @@ function FloatingCopyButton({ editor }) {
     updateRect()
 
     // Update on scroll/resize
-    const handleScroll = () => updateRect()
+    let scrollTimeout = null
+    const handleScroll = () => {
+      if (isMobile) {
+        setIsScrolling(true)
+        // Hide button immediately on mobile scroll
+        setOpacity(0)
+        setBlockRect(null)
+        // Clear scrolling state after scroll ends with longer delay
+        if (scrollTimeout) {
+          clearTimeout(scrollTimeout)
+        }
+        scrollTimeout = setTimeout(() => {
+          setIsScrolling(false)
+          // Only update if code block is still in viewport
+          const editorEl = document.querySelector('.bn-editor')
+          if (editorEl && activeElement) {
+            const editorRect = editorEl.getBoundingClientRect()
+            const blockRect = activeElement.getBoundingClientRect()
+            // Check if code block is actually visible in viewport
+            const isVisible = 
+              blockRect.top < editorRect.bottom &&
+              blockRect.bottom > editorRect.top &&
+              blockRect.left < editorRect.right &&
+              blockRect.right > editorRect.left &&
+              blockRect.width > 0 &&
+              blockRect.height > 0
+            
+            if (isVisible) {
+              updateRect()
+            }
+          }
+        }, 300) // Longer delay to prevent flashing
+      } else {
+        updateRect()
+      }
+    }
+    
     const handleResize = () => updateRect()
     
+    // Find the scrollable container (the one with overflow: auto)
+    const editorEl = document.querySelector('.bn-editor')
+    const scrollContainer = editorEl?.closest('[style*="overflow"]') || 
+                           editorEl?.parentElement?.closest('[style*="overflow"]') ||
+                           window
+    
+    if (scrollContainer && scrollContainer !== window) {
+      scrollContainer.addEventListener('scroll', handleScroll, true)
+    }
     window.addEventListener('scroll', handleScroll, true)
     window.addEventListener('resize', handleResize)
     
     return () => {
+      if (scrollContainer && scrollContainer !== window) {
+        scrollContainer.removeEventListener('scroll', handleScroll, true)
+      }
       window.removeEventListener('scroll', handleScroll, true)
       window.removeEventListener('resize', handleResize)
+      if (scrollTimeout) {
+        clearTimeout(scrollTimeout)
+      }
     }
-  }, [activeElement, isPanelVisible])
+  }, [activeElement, isPanelVisible, isMobile, isScrolling])
 
   // Hide toolbar when editor loses focus and no hover (UX polish)
   useEffect(() => {
@@ -541,6 +666,9 @@ function FloatingCopyButton({ editor }) {
   
   if (!activeElement || !blockRect) return null
 
+  // On mobile, don't show if scrolling
+  if (isMobile && isScrolling) return null
+
   // Double-check that the button position is actually within the visible editor
   const editorEl = document.querySelector('.bn-editor')
   if (!editorEl) return null
@@ -561,6 +689,25 @@ function FloatingCopyButton({ editor }) {
       blockRect.bottom < editorRect.top ||
       blockRect.top > editorRect.bottom) {
     return null
+  }
+  
+  // On mobile, additional check: ensure code block is actually visible in viewport
+  if (isMobile) {
+    const viewportTop = 0
+    const viewportBottom = window.innerHeight
+    const viewportLeft = 0
+    const viewportRight = window.innerWidth
+    
+    // Check if code block is visible in viewport
+    const isInViewport = 
+      blockRect.top < viewportBottom &&
+      blockRect.bottom > viewportTop &&
+      blockRect.left < viewportRight &&
+      blockRect.right > viewportLeft
+    
+    if (!isInViewport) {
+      return null
+    }
   }
 
   // Header height is 50px - avoid overlapping with header
@@ -586,7 +733,7 @@ function FloatingCopyButton({ editor }) {
     position: 'fixed',
     top: finalTop,
     left: buttonLeft,
-    zIndex: 1000,
+    zIndex: 100, // Lower than modals (which use 200+) but above normal content
     opacity,
     transition: 'opacity 120ms ease',
     pointerEvents: opacity > 0 ? 'auto' : 'none',
@@ -656,6 +803,8 @@ function FloatingCopyButton({ editor }) {
 }
 
 export default function NotesPanel({ docId }) {
+  const isMobile = useIsMobile()
+  const isTablet = useIsTablet()
   const [loading, setLoading] = useState(true)
   const editor = useCreateBlockNote({ schema, initialContent: defaultBlocks })
   const saveTimeout = useRef(null)
@@ -874,20 +1023,32 @@ export default function NotesPanel({ docId }) {
         display: 'flex', 
         flexDirection: 'column', 
         height: '100%', 
+        width: '100%',
+        maxWidth: '100%',
         position: 'relative',
         backgroundColor: colorScheme === 'dark' ? '#1a1b1e' : '#f8f9fa',
+        boxSizing: 'border-box',
+      }}
+      sx={{
+        '@media (max-width: 768px)': {
+          width: '100%',
+          maxWidth: '100vw',
+        },
       }}
     >
       <Box 
         style={{ 
           flex: 1, 
           overflow: 'auto', 
-          paddingTop: '48px',
-          paddingLeft: '200px',
-          paddingRight: '200px',
-          paddingBottom: '48px',
+          paddingTop: isMobile ? '1rem' : (isTablet ? '2rem' : '3rem'),
+          paddingLeft: isMobile ? '1rem' : (isTablet ? '2rem' : '12.5rem'), // ~200px at default font size, scales with rem
+          paddingRight: isMobile ? '1rem' : (isTablet ? '2rem' : '12.5rem'),
+          paddingBottom: isMobile ? '1rem' : (isTablet ? '2rem' : '3rem'),
           scrollbarWidth: 'none', /* Firefox */
           msOverflowStyle: 'none', /* IE and Edge */
+          width: '100%',
+          maxWidth: '100%',
+          boxSizing: 'border-box',
         }}
         sx={{
           '&::-webkit-scrollbar': {
@@ -899,22 +1060,36 @@ export default function NotesPanel({ docId }) {
           ref={whiteBackgroundRef}
           style={{
             backgroundColor: colorScheme === 'dark' ? 'var(--mantine-color-dark-7)' : '#ffffff',
-            minHeight: '1200px',
-            paddingTop: '24px',
-            paddingLeft: '16px',
-            paddingRight: '24px',
-            paddingBottom: '400px',
+            minHeight: isMobile ? '800px' : '1200px',
+            paddingTop: isMobile ? '16px' : '24px',
+            paddingLeft: isMobile ? '12px' : '16px',
+            paddingRight: isMobile ? '12px' : '24px',
+            paddingBottom: isMobile ? '200px' : '400px',
             border: colorScheme === 'dark' ? '1px solid var(--mantine-color-dark-4)' : '1px solid #e0e0e0',
             borderRadius: '5px',
             position: 'relative', // Make container relative for absolute positioned buttons
+            width: '100%',
+            maxWidth: '100%',
+            boxSizing: 'border-box',
           }}
         >
           <Box
             style={{
-              paddingLeft: '36px', // Extra left padding to make room for buttons (32px button + 8px gap - 4px spacing)
+              paddingLeft: isMobile ? '0.5rem' : '2.25rem', // Extra left padding to make room for buttons (32px button + 8px gap - 4px spacing)
+              width: '100%',
+              maxWidth: '100%',
+              boxSizing: 'border-box',
+              minWidth: 0,
             }}
           >
-            <BlockNoteView editor={editor} theme={colorScheme} onChange={handleChange} />
+            <div style={{ 
+              width: '100%', 
+              maxWidth: '100%', 
+              minWidth: 0,
+              boxSizing: 'border-box',
+            }}>
+              <BlockNoteView editor={editor} theme={colorScheme} onChange={handleChange} />
+            </div>
           </Box>
           {showLinks && links.length > 0 && (
             <DocumentLinkButtons

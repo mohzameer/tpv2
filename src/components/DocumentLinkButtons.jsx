@@ -1,4 +1,21 @@
 import { useState, useMemo, useEffect } from 'react'
+
+// Hook to detect mobile viewport
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(false)
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth <= 768)
+    }
+    
+    checkMobile()
+    window.addEventListener('resize', checkMobile)
+    return () => window.removeEventListener('resize', checkMobile)
+  }, [])
+
+  return isMobile
+}
 import { IconFile, IconBrush, IconTrash, IconArrowRight } from '@tabler/icons-react'
 import { Menu, useMantineTheme } from '@mantine/core'
 import { useTheme } from '../context/ThemeContext'
@@ -13,6 +30,7 @@ function LinkButton({ link, containerRef, onDelete, index }) {
   const [isHovered, setIsHovered] = useState(false)
   const navigate = useNavigate()
   const { project } = useProjectContext()
+  const isMobile = useIsMobile()
   
   const handleNavigate = () => {
     // Use targetProjectId from link, or fallback to current project
@@ -32,8 +50,9 @@ function LinkButton({ link, containerRef, onDelete, index }) {
 
   if (!containerRef?.current) return null
 
-  const buttonSize = 32
-  const gap = 8
+  // Responsive button size
+  const buttonSize = isMobile ? 28 : 32
+  const gap = isMobile ? 4 : 8
 
   // Calculate button position relative to container (absolute positioning)
   // Position inside the container, hugging the left border
@@ -71,7 +90,7 @@ function LinkButton({ link, containerRef, onDelete, index }) {
     pointerEvents: 'auto',
   }
 
-  const iconSize = 18
+  const iconSize = isMobile ? 16 : 18
   const iconColor = '#ffffff' // White icons on primary color background
 
   // For backward compatibility, allow links without targetProjectId (they'll use current project)
@@ -184,7 +203,8 @@ export function findNearestNonOverlappingY(y, existingLinks, buttonSize, spacing
 // Main component to manage all document/drawing link buttons
 export default function DocumentLinkButtons({ containerRef, links, onAddLink, onDeleteLink }) {
   const { colorScheme } = useTheme()
-  const buttonSize = 32
+  const isMobile = useIsMobile()
+  const buttonSize = isMobile ? 28 : 32
   const spacing = 4 // Spacing between buttons
 
   const [isContainerReady, setIsContainerReady] = useState(false)

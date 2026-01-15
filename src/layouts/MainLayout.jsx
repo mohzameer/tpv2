@@ -12,7 +12,13 @@ export default function MainLayout() {
         <Header />
       </AppShell.Header>
 
-      <AppShell.Main style={{ height: 'calc(100vh - 50px)', overflow: 'hidden' }}>
+      <AppShell.Main style={{ 
+        height: 'calc(100vh - 50px)', 
+        overflow: 'hidden',
+        width: '100%',
+        maxWidth: '100%',
+        boxSizing: 'border-box',
+      }}>
         <Outlet />
       </AppShell.Main>
     </AppShell>
