@@ -6,6 +6,17 @@ import { BlockNoteView } from '@blocknote/mantine'
 import '@blocknote/mantine/style.css'
 import './NotesPanel.css'
 import { useState, useEffect, useRef, useMemo } from 'react'
+import { getDocumentContent, updateDocumentContent, updateDocumentLinks } from '../lib/api'
+import { useTheme } from '../context/ThemeContext'
+import { useSync } from '../context/SyncContext'
+import { useAuth } from '../context/AuthContext'
+import { useEditor } from '../context/EditorContext'
+import FloatingLinkButton from './FloatingLinkButton'
+import DocumentLinkButtons, { checkOverlap, findNearestNonOverlappingY } from './DocumentLinkButtons'
+import DocumentLinkModal from './DocumentLinkModal'
+import { useProjectContext } from '../context/ProjectContext'
+import { useShowLinks } from '../context/ShowLinksContext'
+import { isDrawing } from '../lib/documentType'
 
 // Hook to detect mobile viewport
 function useIsMobile() {
@@ -23,17 +34,6 @@ function useIsMobile() {
 
   return isMobile
 }
-import { getDocumentContent, updateDocumentContent, updateDocumentLinks } from '../lib/api'
-import { useTheme } from '../context/ThemeContext'
-import { useSync } from '../context/SyncContext'
-import { useAuth } from '../context/AuthContext'
-import { useEditor } from '../context/EditorContext'
-import FloatingLinkButton from './FloatingLinkButton'
-import DocumentLinkButtons, { checkOverlap, findNearestNonOverlappingY } from './DocumentLinkButtons'
-import DocumentLinkModal from './DocumentLinkModal'
-import { useProjectContext } from '../context/ProjectContext'
-import { useShowLinks } from '../context/ShowLinksContext'
-import { isDrawing } from '../lib/documentType'
 
 // Only keep markdown-compatible block types
 const { 
@@ -299,6 +299,8 @@ function FloatingCopyButton({ editor }) {
   const [blockRect, setBlockRect] = useState(null)
   const [opacity, setOpacity] = useState(0)
   const [isPanelVisible, setIsPanelVisible] = useState(false) // Start as false, check on mount
+  const [isScrolling, setIsScrolling] = useState(false)
+  const isMobile = useIsMobile()
 
   // Determine which code block element to show toolbar for
   // Selection takes priority over hover
@@ -446,6 +448,13 @@ function FloatingCopyButton({ editor }) {
     }
 
     const updateRect = () => {
+      // On mobile, hide button while scrolling
+      if (isMobile && isScrolling) {
+        setOpacity(0)
+        setBlockRect(null)
+        return
+      }
+      
       // Double-check visibility before showing button
       const editorEl = document.querySelector('.bn-editor')
       if (!editorEl) {
@@ -472,8 +481,34 @@ function FloatingCopyButton({ editor }) {
         }
       }
 
+      if (!activeElement) {
+        setBlockRect(null)
+        setOpacity(0)
+        return
+      }
+
       const rect = activeElement.getBoundingClientRect()
       if (rect && rect.width > 0 && rect.height > 0) {
+        // On mobile, check if code block is actually visible in viewport (not just in editor bounds)
+        if (isMobile) {
+          const viewportHeight = window.innerHeight
+          const viewportTop = 0
+          const viewportBottom = viewportHeight
+          
+          // Check if code block is visible in viewport
+          const isInViewport = 
+            rect.top < viewportBottom &&
+            rect.bottom > viewportTop &&
+            rect.left < window.innerWidth &&
+            rect.right > 0
+          
+          if (!isInViewport) {
+            setBlockRect(null)
+            setOpacity(0)
+            return
+          }
+        }
+        
         // Verify the code block is actually within the visible editor bounds
         const isWithinEditor = 
           rect.left >= editorRect.left &&
@@ -483,7 +518,12 @@ function FloatingCopyButton({ editor }) {
         
         if (isWithinEditor) {
           setBlockRect(rect)
-          setOpacity(1)
+          // On mobile, only show if not scrolling and in viewport
+          if (!isMobile || (!isScrolling && rect.top >= 0 && rect.bottom <= window.innerHeight)) {
+            setOpacity(1)
+          } else {
+            setOpacity(0)
+          }
         } else {
           setBlockRect(null)
           setOpacity(0)
@@ -497,17 +537,68 @@ function FloatingCopyButton({ editor }) {
     updateRect()
 
     // Update on scroll/resize
-    const handleScroll = () => updateRect()
+    let scrollTimeout = null
+    const handleScroll = () => {
+      if (isMobile) {
+        setIsScrolling(true)
+        // Hide button immediately on mobile scroll
+        setOpacity(0)
+        setBlockRect(null)
+        // Clear scrolling state after scroll ends with longer delay
+        if (scrollTimeout) {
+          clearTimeout(scrollTimeout)
+        }
+        scrollTimeout = setTimeout(() => {
+          setIsScrolling(false)
+          // Only update if code block is still in viewport
+          const editorEl = document.querySelector('.bn-editor')
+          if (editorEl && activeElement) {
+            const editorRect = editorEl.getBoundingClientRect()
+            const blockRect = activeElement.getBoundingClientRect()
+            // Check if code block is actually visible in viewport
+            const isVisible = 
+              blockRect.top < editorRect.bottom &&
+              blockRect.bottom > editorRect.top &&
+              blockRect.left < editorRect.right &&
+              blockRect.right > editorRect.left &&
+              blockRect.width > 0 &&
+              blockRect.height > 0
+            
+            if (isVisible) {
+              updateRect()
+            }
+          }
+        }, 300) // Longer delay to prevent flashing
+      } else {
+        updateRect()
+      }
+    }
+    
     const handleResize = () => updateRect()
     
+    // Find the scrollable container (the one with overflow: auto)
+    const editorEl = document.querySelector('.bn-editor')
+    const scrollContainer = editorEl?.closest('[style*="overflow"]') || 
+                           editorEl?.parentElement?.closest('[style*="overflow"]') ||
+                           window
+    
+    if (scrollContainer && scrollContainer !== window) {
+      scrollContainer.addEventListener('scroll', handleScroll, true)
+    }
     window.addEventListener('scroll', handleScroll, true)
     window.addEventListener('resize', handleResize)
     
     return () => {
+      if (scrollContainer && scrollContainer !== window) {
+        scrollContainer.removeEventListener('scroll', handleScroll, true)
+      }
       window.removeEventListener('scroll', handleScroll, true)
       window.removeEventListener('resize', handleResize)
+      if (scrollTimeout) {
+        clearTimeout(scrollTimeout)
+      }
     }
-  }, [activeElement, isPanelVisible])
+  }, [activeElement, isPanelVisible, isMobile, isScrolling])
 
   // Hide toolbar when editor loses focus and no hover (UX polish)
   useEffect(() => {
@@ -558,6 +649,9 @@ function FloatingCopyButton({ editor }) {
   
   if (!activeElement || !blockRect) return null
 
+  // On mobile, don't show if scrolling
+  if (isMobile && isScrolling) return null
+
   // Double-check that the button position is actually within the visible editor
   const editorEl = document.querySelector('.bn-editor')
   if (!editorEl) return null
@@ -578,6 +672,25 @@ function FloatingCopyButton({ editor }) {
       blockRect.bottom < editorRect.top ||
       blockRect.top > editorRect.bottom) {
     return null
+  }
+  
+  // On mobile, additional check: ensure code block is actually visible in viewport
+  if (isMobile) {
+    const viewportTop = 0
+    const viewportBottom = window.innerHeight
+    const viewportLeft = 0
+    const viewportRight = window.innerWidth
+    
+    // Check if code block is visible in viewport
+    const isInViewport = 
+      blockRect.top < viewportBottom &&
+      blockRect.bottom > viewportTop &&
+      blockRect.left < viewportRight &&
+      blockRect.right > viewportLeft
+    
+    if (!isInViewport) {
+      return null
+    }
   }
 
   // Header height is 50px - avoid overlapping with header
