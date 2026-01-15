@@ -768,6 +768,7 @@ export default function NotesPanel({ docId }) {
         return { success: false }
       }
     } catch (err) {
+      console.error('Error saving links:', err)
       // If it's a schema cache issue, return error info
       if (err?.code === 'PGRST204') {
         return { success: false, document_links_skipped: true, error: 'PGRST204' }
@@ -915,7 +916,7 @@ export default function NotesPanel({ docId }) {
           >
             <BlockNoteView editor={editor} theme={colorScheme} onChange={handleChange} />
           </Box>
-          {showLinks && (
+          {showLinks && links.length > 0 && (
             <DocumentLinkButtons
               containerRef={whiteBackgroundRef}
               links={links}

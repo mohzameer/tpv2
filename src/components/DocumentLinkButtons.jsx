@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { IconFile, IconBrush, IconTrash, IconArrowRight } from '@tabler/icons-react'
 import { Menu, useMantineTheme } from '@mantine/core'
 import { useTheme } from '../context/ThemeContext'
@@ -187,6 +187,17 @@ export default function DocumentLinkButtons({ containerRef, links, onAddLink, on
   const buttonSize = 32
   const spacing = 4 // Spacing between buttons
 
+  const [isContainerReady, setIsContainerReady] = useState(false)
+
+  // Wait for container to be ready
+  useEffect(() => {
+    if (containerRef?.current) {
+      setIsContainerReady(true)
+    } else {
+      setIsContainerReady(false)
+    }
+  }, [containerRef])
+
   // Simply use links as-is (they should already be positioned correctly)
   // No automatic repositioning - buttons are added only if they don't overlap
   const positionedLinks = useMemo(() => {
@@ -200,7 +211,7 @@ export default function DocumentLinkButtons({ containerRef, links, onAddLink, on
     })
   }, [links])
 
-  if (!containerRef?.current || !links || links.length === 0) return null
+  if (!isContainerReady || !links || links.length === 0) return null
 
   // Render buttons inside the container so they scroll with it
   return (
