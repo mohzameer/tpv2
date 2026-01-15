@@ -18,6 +18,8 @@
 .bn-editor {
   padding-top: 24px !important;
   background-color: transparent !important;
+  width: 100% !important;
+  max-width: 100% !important;
 }
 
 /* Ensure BlockNote container and root elements don't override background */
@@ -26,4 +28,68 @@
 [class*="bn-container"],
 [class*="bn-root"] {
   background-color: transparent !important;
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+/* Force full width on mobile - remove any width constraints */
+/* Using both max-width and orientation for better mobile detection */
+@media (max-width: 768px), (max-width: 1024px) and (orientation: portrait) {
+  /* Target BlockNote root containers */
+  .bn-editor,
+  .bn-container,
+  .bn-root,
+  [class*="bn-container"],
+  [class*="bn-root"],
+  [class*="bn-editor"],
+  div[class*="bn-"] {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+  }
+  
+  /* Target all BlockNote internal elements */
+  .bn-editor > *,
+  .bn-container > *,
+  .bn-root > *,
+  [class*="bn-container"] > *,
+  [class*="bn-root"] > *,
+  div[class*="bn-"] > * {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+  }
+  
+  /* Ensure text doesn't wrap vertically - force horizontal layout */
+  .bn-editor *,
+  .bn-container *,
+  .bn-root *,
+  div[class*="bn-"] * {
+    word-wrap: break-word !important;
+    overflow-wrap: break-word !important;
+    white-space: normal !important;
+    writing-mode: horizontal-tb !important;
+    text-orientation: mixed !important;
+  }
+  
+  /* Force block elements to be full width */
+  .bn-block-content,
+  [class*="bn-block"],
+  [class*="bn-inline-content"],
+  [class*="bn-content"],
+  div[data-node-type] {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    display: block !important;
+  }
+  
+  /* Prevent any flex or grid layouts from constraining width */
+  [class*="bn-"] {
+    flex-basis: auto !important;
+    flex-grow: 1 !important;
+    flex-shrink: 1 !important;
+  }
 }

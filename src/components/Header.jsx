@@ -6,13 +6,30 @@ import { useProjectContext } from '../context/ProjectContext'
 import { useAuth } from '../context/AuthContext'
 import { useEditor } from '../context/EditorContext'
 import { useShowLinks } from '../context/ShowLinksContext'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import LoginModal from './LoginModal'
 import ProjectsModal from './ProjectsModal'
 import HelpModal from './HelpModal'
 import MarkdownImportModal from './MarkdownImportModal'
+
+// Hook to detect mobile viewport
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(false)
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth <= 768)
+    }
+    
+    checkMobile()
+    window.addEventListener('resize', checkMobile)
+    return () => window.removeEventListener('resize', checkMobile)
+  }, [])
+
+  return isMobile
+}
 
 export default function Header() {
   const { colorScheme, toggleColorScheme } = useTheme()
@@ -29,6 +46,7 @@ export default function Header() {
   const [showProjectsModal, setShowProjectsModal] = useState(false)
   const [showHelpModal, setShowHelpModal] = useState(false)
   const [showImportModal, setShowImportModal] = useState(false)
+  const isMobile = useIsMobile()
 
   function handleDoubleClick() {
     if (project) {
@@ -84,8 +102,22 @@ export default function Header() {
   }
 
   return (
-    <Group h="100%" px="md" justify="space-between">
-      <Group>
+    <Group 
+      h="100%" 
+      px="md" 
+      justify="space-between"
+      wrap="nowrap"
+      style={{
+        overflow: 'hidden',
+      }}
+      sx={{
+        '@media (max-width: 768px)': {
+          paddingLeft: '0.75rem',
+          paddingRight: '0.75rem',
+        },
+      }}
+    >
+      <Group wrap="nowrap" style={{ minWidth: 0, flex: '0 1 auto' }}>
         <img 
           src="/logo.svg" 
           alt="ThinkPost" 
@@ -93,7 +125,8 @@ export default function Header() {
           onClick={() => setShowProjectsModal(true)}
           style={{ 
             cursor: 'pointer',
-            filter: colorScheme === 'dark' ? 'invert(1)' : 'none'
+            filter: colorScheme === 'dark' ? 'invert(1)' : 'none',
+            flexShrink: 0,
           }}
         />
         {project && (
@@ -112,6 +145,11 @@ export default function Header() {
                 maxLength={100}
                 autoFocus
                 styles={{ input: { fontWeight: 500 } }}
+                sx={{
+                  '@media (max-width: 768px)': {
+                    width: '120px',
+                  },
+                }}
               />
             ) : (
               <Text 
@@ -122,12 +160,32 @@ export default function Header() {
                   e.stopPropagation()
                   handleDoubleClick()
                 }}
-                style={{ cursor: 'pointer' }}
+                style={{ cursor: 'pointer', minWidth: 0 }}
+                sx={{
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  maxWidth: '200px',
+                  '@media (max-width: 768px)': {
+                    maxWidth: '100px',
+                    fontSize: '12px',
+                  },
+                }}
               >
                 {project.name}
               </Text>
             )}
-            <ActionIcon variant="transparent" size="sm" onClick={() => setShowProjectsModal(true)}>
+            <ActionIcon 
+              variant="transparent" 
+              size="sm" 
+              onClick={() => setShowProjectsModal(true)}
+              sx={{
+                flexShrink: 0,
+                '@media (max-width: 768px)': {
+                  display: 'none',
+                },
+              }}
+            >
               <IconFolder size={18} color={colorScheme === 'dark' ? '#9ca3af' : '#6b7280'} />
             </ActionIcon>
           </>
@@ -135,8 +193,8 @@ export default function Header() {
         <ProjectsModal opened={showProjectsModal} onClose={() => setShowProjectsModal(false)} />
       </Group>
 
-      <Group gap="xs">
-        {docId && (
+      <Group gap="xs" wrap="nowrap" style={{ flexShrink: 0 }}>
+        {docId && !isMobile && (
           <>
             <Switch
               checked={showLinks}

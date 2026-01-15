@@ -122,7 +122,13 @@ export default function DocumentPage() {
   const documentType = getDocumentType(document)
 
   return (
-    <div style={{ height: '100%', width: '100%' }}>
+    <div style={{ 
+      height: '100%', 
+      width: '100%',
+      maxWidth: '100%',
+      overflow: 'hidden',
+      boxSizing: 'border-box',
+    }}>
       {documentType === 'drawing' ? (
         <DrawingPanel docId={document.id} />
       ) : (

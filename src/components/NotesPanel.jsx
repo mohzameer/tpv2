@@ -6,6 +6,23 @@ import { BlockNoteView } from '@blocknote/mantine'
 import '@blocknote/mantine/style.css'
 import './NotesPanel.css'
 import { useState, useEffect, useRef, useMemo } from 'react'
+
+// Hook to detect mobile viewport
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(false)
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth <= 768)
+    }
+    
+    checkMobile()
+    window.addEventListener('resize', checkMobile)
+    return () => window.removeEventListener('resize', checkMobile)
+  }, [])
+
+  return isMobile
+}
 import { getDocumentContent, updateDocumentContent, updateDocumentLinks } from '../lib/api'
 import { useTheme } from '../context/ThemeContext'
 import { useSync } from '../context/SyncContext'
@@ -656,6 +673,7 @@ function FloatingCopyButton({ editor }) {
 }
 
 export default function NotesPanel({ docId }) {
+  const isMobile = useIsMobile()
   const [loading, setLoading] = useState(true)
   const editor = useCreateBlockNote({ schema, initialContent: defaultBlocks })
   const saveTimeout = useRef(null)
@@ -874,24 +892,40 @@ export default function NotesPanel({ docId }) {
         display: 'flex', 
         flexDirection: 'column', 
         height: '100%', 
+        width: '100%',
+        maxWidth: '100%',
         position: 'relative',
         backgroundColor: colorScheme === 'dark' ? '#1a1b1e' : '#f8f9fa',
+        boxSizing: 'border-box',
+      }}
+      sx={{
+        '@media (max-width: 768px)': {
+          width: '100%',
+          maxWidth: '100vw',
+        },
       }}
     >
       <Box 
         style={{ 
           flex: 1, 
           overflow: 'auto', 
-          paddingTop: '48px',
-          paddingLeft: '200px',
-          paddingRight: '200px',
-          paddingBottom: '48px',
+          paddingTop: isMobile ? '1rem' : '3rem',
+          paddingLeft: isMobile ? '1rem' : '12.5rem', // ~200px at default font size, scales with rem
+          paddingRight: isMobile ? '1rem' : '12.5rem',
+          paddingBottom: isMobile ? '1rem' : '3rem',
           scrollbarWidth: 'none', /* Firefox */
           msOverflowStyle: 'none', /* IE and Edge */
+          width: '100%',
+          maxWidth: '100%',
+          boxSizing: 'border-box',
         }}
         sx={{
           '&::-webkit-scrollbar': {
             display: 'none', /* Chrome, Safari, Opera */
+          },
+          '@media (min-width: 769px) and (max-width: 1024px)': {
+            paddingLeft: '4rem',
+            paddingRight: '4rem',
           },
         }}
       >
@@ -899,22 +933,36 @@ export default function NotesPanel({ docId }) {
           ref={whiteBackgroundRef}
           style={{
             backgroundColor: colorScheme === 'dark' ? 'var(--mantine-color-dark-7)' : '#ffffff',
-            minHeight: '1200px',
-            paddingTop: '24px',
-            paddingLeft: '16px',
-            paddingRight: '24px',
-            paddingBottom: '400px',
+            minHeight: isMobile ? '800px' : '1200px',
+            paddingTop: isMobile ? '16px' : '24px',
+            paddingLeft: isMobile ? '12px' : '16px',
+            paddingRight: isMobile ? '12px' : '24px',
+            paddingBottom: isMobile ? '200px' : '400px',
             border: colorScheme === 'dark' ? '1px solid var(--mantine-color-dark-4)' : '1px solid #e0e0e0',
             borderRadius: '5px',
             position: 'relative', // Make container relative for absolute positioned buttons
+            width: '100%',
+            maxWidth: '100%',
+            boxSizing: 'border-box',
           }}
         >
           <Box
             style={{
-              paddingLeft: '36px', // Extra left padding to make room for buttons (32px button + 8px gap - 4px spacing)
+              paddingLeft: isMobile ? '0.5rem' : '2.25rem', // Extra left padding to make room for buttons (32px button + 8px gap - 4px spacing)
+              width: '100%',
+              maxWidth: '100%',
+              boxSizing: 'border-box',
+              minWidth: 0,
             }}
           >
-            <BlockNoteView editor={editor} theme={colorScheme} onChange={handleChange} />
+            <div style={{ 
+              width: '100%', 
+              maxWidth: '100%', 
+              minWidth: 0,
+              boxSizing: 'border-box',
+            }}>
+              <BlockNoteView editor={editor} theme={colorScheme} onChange={handleChange} />
+            </div>
           </Box>
           {showLinks && links.length > 0 && (
             <DocumentLinkButtons
