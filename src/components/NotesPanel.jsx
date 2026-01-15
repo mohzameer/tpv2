@@ -778,8 +778,8 @@ export default function NotesPanel({ docId }) {
     }
   }
   
-  function handleLinkSelected(selectedDocument) {
-    if (!pendingLinkPosition) return
+  function handleLinkSelected(selectedDocument, selectedProject) {
+    if (!pendingLinkPosition || !selectedProject) return
     
     const buttonSize = 32
     const spacing = 4
@@ -789,22 +789,23 @@ export default function NotesPanel({ docId }) {
     if (checkOverlap(position.y, links, buttonSize, spacing)) {
       const adjustment = findNearestNonOverlappingY(position.y, links, buttonSize, spacing)
       if (adjustment !== null && Math.abs(adjustment) < buttonSize * 10) {
-        createLink(selectedDocument, position, adjustment)
+        createLink(selectedDocument, selectedProject, position, adjustment)
       }
     } else {
-      createLink(selectedDocument, position, 0)
+      createLink(selectedDocument, selectedProject, position, 0)
     }
     
     setPendingLinkPosition(null)
     setLinkModalOpened(false)
   }
   
-  async function createLink(selectedDocument, position, adjustment) {
+  async function createLink(selectedDocument, selectedProject, position, adjustment) {
     const linkType = isDrawing(selectedDocument) ? 'drawing' : 'document'
     const newLink = {
       id: `link-${linkIdCounter.current++}`,
       targetDocumentId: selectedDocument.id,
       targetDocumentNumber: selectedDocument.document_number,
+      targetProjectId: selectedProject.id,
       type: linkType,
       title: selectedDocument.title || (linkType === 'document' ? 'Untitled' : 'Untitled drawing'),
       x: position.x,

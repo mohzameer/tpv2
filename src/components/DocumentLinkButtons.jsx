@@ -15,13 +15,15 @@ function LinkButton({ link, containerRef, onDelete, index }) {
   const { project } = useProjectContext()
   
   const handleNavigate = () => {
-    if (!project || !link.targetDocumentNumber) return
+    // Use targetProjectId from link, or fallback to current project
+    const targetProjectId = link.targetProjectId || project?.id
+    if (!targetProjectId || !link.targetDocumentNumber) return
     
-    // Store document number
-    setLastVisitedDocumentNumber(project.id, link.targetDocumentNumber)
+    // Store document number for the target project
+    setLastVisitedDocumentNumber(targetProjectId, link.targetDocumentNumber)
     
-    // Navigate to linked document
-    navigate(`/${project.id}/${link.targetDocumentNumber}`)
+    // Navigate to linked document (may be in different project)
+    navigate(`/${targetProjectId}/${link.targetDocumentNumber}`)
   }
   
   const handleDelete = () => {
@@ -72,6 +74,7 @@ function LinkButton({ link, containerRef, onDelete, index }) {
   const iconSize = 18
   const iconColor = '#ffffff' // White icons on primary color background
 
+  // For backward compatibility, allow links without targetProjectId (they'll use current project)
   const isInvalid = !link.targetDocumentId || !link.targetDocumentNumber
 
   return (

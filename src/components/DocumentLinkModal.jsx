@@ -33,15 +33,11 @@ export default function DocumentLinkModal({ opened, onClose, onSelectDocument, c
   useEffect(() => {
     if (opened) {
       loadProjects()
-      // Automatically select current project
-      if (project) {
-        setSelectedProject(project)
-      } else {
-        setSelectedProject(null)
-        setDocuments([])
-      }
+      // Start with projects view (don't auto-select current project)
+      setSelectedProject(null)
+      setDocuments([])
     }
-  }, [opened, project])
+  }, [opened])
 
   useEffect(() => {
     if (selectedProject) {
@@ -81,9 +77,9 @@ export default function DocumentLinkModal({ opened, onClose, onSelectDocument, c
   function handleSelectDocument(doc) {
     if (!selectedProject) return
     
-    // Call callback with selected document
+    // Call callback with selected document and project
     if (onSelectDocument) {
-      onSelectDocument(doc)
+      onSelectDocument(doc, selectedProject)
     }
     onClose()
   }
