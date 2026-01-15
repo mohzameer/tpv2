@@ -66,6 +66,7 @@ export function useProject() {
     setLoading(true)
     try {
       let projects = await getProjects()
+      console.log('[useProject] Available projects:', projects.length, projects.map(p => ({ id: p.id, name: p.name })))
       
       // Create default project if none exists (for first-time users/guests)
       // This ensures guest users get a project on first root URL load
@@ -137,12 +138,15 @@ export function useProject() {
       }
 
       setProject(currentProject)
+      console.log('[useProject] Selected project:', currentProject.id, currentProject.name)
 
       // Load documents
       let docs = await getDocuments(currentProject.id)
+      console.log('[useProject] Loaded documents for project', currentProject.id, ':', docs.length, docs)
       
       // Create default document if none exists
       if (docs.length === 0) {
+        console.log('[useProject] No documents found, creating default document')
         const newDoc = await createDocument(currentProject.id, 'Untitled')
         docs = [newDoc]
       }
@@ -155,9 +159,9 @@ export function useProject() {
     }
   }
 
-  async function addDocument(title = 'Untitled') {
+  async function addDocument(title = 'Untitled', documentType = 'text') {
     if (!project) return
-    const doc = await createDocument(project.id, title)
+    const doc = await createDocument(project.id, title, documentType)
     setDocuments((prev) => [...prev, doc])
     return doc
   }

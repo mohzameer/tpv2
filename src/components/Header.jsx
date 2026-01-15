@@ -1,4 +1,4 @@
-import { Group, SegmentedControl, Box, ActionIcon, Loader, Text, TextInput, Menu } from '@mantine/core'
+import { Group, ActionIcon, Loader, Text, TextInput, Menu } from '@mantine/core'
 import { IconSun, IconMoon, IconUser, IconCloud, IconSettings, IconLogout, IconLogin, IconFolder, IconHelp } from '@tabler/icons-react'
 import { useTheme } from '../context/ThemeContext'
 import { useSync } from '../context/SyncContext'
@@ -11,7 +11,7 @@ import LoginModal from './LoginModal'
 import ProjectsModal from './ProjectsModal'
 import HelpModal from './HelpModal'
 
-export default function Header({ sidebarOpen, onToggleSidebar, mode, onModeChange }) {
+export default function Header() {
   const { colorScheme, toggleColorScheme } = useTheme()
   const { isSyncing } = useSync()
   const { project, refreshDocuments } = useProjectContext()
@@ -50,7 +50,7 @@ export default function Header({ sidebarOpen, onToggleSidebar, mode, onModeChang
           src="/logo.svg" 
           alt="ThinkPost" 
           height={28} 
-          onClick={onToggleSidebar}
+          onClick={() => setShowProjectsModal(true)}
           style={{ 
             cursor: 'pointer',
             filter: colorScheme === 'dark' ? 'invert(1)' : 'none'
@@ -77,7 +77,7 @@ export default function Header({ sidebarOpen, onToggleSidebar, mode, onModeChang
               <Text 
                 size="sm" 
                 fw={500} 
-                onClick={onToggleSidebar}
+                onClick={() => setShowProjectsModal(true)}
                 onDoubleClick={(e) => {
                   e.stopPropagation()
                   handleDoubleClick()
@@ -94,19 +94,6 @@ export default function Header({ sidebarOpen, onToggleSidebar, mode, onModeChang
         )}
         <ProjectsModal opened={showProjectsModal} onClose={() => setShowProjectsModal(false)} />
       </Group>
-
-      <Box style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)' }}>
-        <SegmentedControl
-          value={mode}
-          onChange={onModeChange}
-          data={[
-            { label: 'Notes', value: 'notes' },
-            { label: 'Both', value: 'both' },
-            { label: 'Drawing', value: 'drawing' },
-          ]}
-          size="xs"
-        />
-      </Box>
 
       <Group gap="xs">
         <ActionIcon variant="transparent" size="lg" style={{ cursor: 'default' }}>

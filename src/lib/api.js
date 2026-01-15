@@ -185,18 +185,36 @@ export async function getDocuments(projectId) {
   return data
 }
 
-export async function createDocument(projectId, title) {
+export async function getDocument(documentId) {
   const { data, error } = await supabase
     .from('documents')
-    .insert({ project_id: projectId, title })
+    .select('*')
+    .eq('id', documentId)
+    .single()
+  if (error) {
+    if (error.code === 'PGRST116') {
+      return null
+    }
+    throw error
+  }
+  return data
+}
+
+export async function createDocument(projectId, title, documentType = 'text') {
+  const { data, error } = await supabase
+    .from('documents')
+    .insert({ 
+      project_id: projectId, 
+      title, 
+      document_type: documentType,
+      notes_content: '[]',
+      drawing_content: '{}',
+      drawing_files: '{}',
+      text_mode: 'text'
+    })
     .select()
     .single()
   if (error) throw error
-  
-  // Create empty content entry
-  await supabase
-    .from('document_contents')
-    .insert({ document_id: data.id })
   
   return data
 }
@@ -266,31 +284,27 @@ export async function getDocumentContent(documentId) {
     }
   }
   
-  // Now fetch the content
+  // Now fetch the content from documents table
   const { data, error } = await supabase
-    .from('document_contents')
-    .select('*')
-    .eq('document_id', documentId)
+    .from('documents')
+    .select('notes_content, drawing_content, drawing_files, text_mode')
+    .eq('id', documentId)
     .single()
   if (error && error.code !== 'PGRST116') throw error
   return data
 }
 
-export async function updateDocumentContent(documentId, { notes_content, drawing_content, layout_mode, layout_ratio, text_mode, notes_panel_size, drawing_panel_size, drawing_files }) {
+export async function updateDocumentContent(documentId, { notes_content, drawing_content, text_mode, drawing_files }) {
   const updates = {}
   if (notes_content !== undefined) updates.notes_content = notes_content
   if (drawing_content !== undefined) updates.drawing_content = drawing_content
-  if (layout_mode !== undefined) updates.layout_mode = layout_mode
-  if (layout_ratio !== undefined) updates.layout_ratio = layout_ratio
   if (text_mode !== undefined) updates.text_mode = text_mode
-  if (notes_panel_size !== undefined) updates.notes_panel_size = notes_panel_size
-  if (drawing_panel_size !== undefined) updates.drawing_panel_size = drawing_panel_size
   if (drawing_files !== undefined) updates.drawing_files = drawing_files
   
   const { data, error } = await supabase
-    .from('document_contents')
+    .from('documents')
     .update(updates)
-    .eq('document_id', documentId)
+    .eq('id', documentId)
     .select()
     .single()
   if (error) throw error

@@ -1,4 +1,4 @@
-import { Box, SegmentedControl, Textarea, Loader, Center } from '@mantine/core'
+import { Box, Loader, Center } from '@mantine/core'
 import { IconCopy } from '@tabler/icons-react'
 import { BlockNoteSchema, defaultBlockSpecs } from '@blocknote/core'
 import { useCreateBlockNote } from '@blocknote/react'
@@ -60,104 +60,6 @@ function getCodeBlockPlainText(block) {
   return ''
 }
 
-// Convert blocks to markdown while preserving empty blocks
-async function blocksToMarkdownPreservingEmpty(editor, blocks) {
-  if (blocks.length === 0) return ''
-  
-  const result = []
-  
-  for (let i = 0; i < blocks.length; i++) {
-    const block = blocks[i]
-    const isEmpty = isEmptyBlock(block)
-    
-    if (isEmpty && block.type === 'paragraph') {
-      // Empty block - represented as empty string
-      result.push('')
-    } else {
-      // Convert this block to markdown
-      let blockMd = await editor.blocksToMarkdownLossy([block])
-      const trimmed = blockMd.trimEnd()
-      if (trimmed) {
-        result.push(trimmed)
-      }
-    }
-  }
-  
-  // Join blocks with double newlines for proper block separation
-  // Empty blocks (empty strings) will create triple newlines, which is fine
-  return result.join('\n\n')
-}
-
-// Convert markdown to blocks while preserving empty lines as empty blocks
-async function markdownToBlocksPreservingEmpty(editor, markdown) {
-  if (!markdown || markdown.trim() === '') {
-    return [{ type: 'paragraph', content: '' }]
-  }
-  
-  // Simply parse with BlockNote - it should handle block separation correctly
-  // The key is that our blocksToMarkdownPreservingEmpty uses \n\n to separate blocks
-  const parsedBlocks = await editor.tryParseMarkdownToBlocks(markdown)
-  
-  // Convert back to markdown to see structure
-  const reconverted = await editor.blocksToMarkdownLossy(parsedBlocks)
-  const originalLines = markdown.split('\n')
-  const reconvertedLines = reconverted.split('\n')
-  
-  // Insert empty blocks where original has empty lines that aren't in reconverted
-  const resultBlocks = []
-  let origIdx = 0
-  let reconvIdx = 0
-  let blockIdx = 0
-  
-  while (origIdx < originalLines.length || blockIdx < parsedBlocks.length) {
-    // Check for empty lines in original
-    if (origIdx < originalLines.length && originalLines[origIdx].trim() === '') {
-      // Check if reconverted also has empty here
-      if (reconvIdx < reconvertedLines.length && reconvertedLines[reconvIdx].trim() === '') {
-        reconvIdx++
-      } else {
-        // Original has empty but reconverted doesn't - insert empty block
-        resultBlocks.push({
-          type: 'paragraph',
-          content: '',
-        })
-      }
-      origIdx++
-    } else if (blockIdx < parsedBlocks.length) {
-      // Add the next parsed block
-      resultBlocks.push(parsedBlocks[blockIdx])
-      blockIdx++
-      
-      // Advance original past this block's content
-      if (origIdx < originalLines.length) {
-        origIdx++
-        // Skip continuation lines
-        while (origIdx < originalLines.length && originalLines[origIdx].trim() !== '') {
-          origIdx++
-        }
-      }
-      
-      // Advance reconverted past this block's content
-      if (reconvIdx < reconvertedLines.length) {
-        reconvIdx++
-        while (reconvIdx < reconvertedLines.length && reconvertedLines[reconvIdx].trim() !== '') {
-          reconvIdx++
-        }
-      }
-    } else {
-      // Only original remains - might be trailing empty lines
-      if (origIdx < originalLines.length && originalLines[origIdx].trim() === '') {
-        resultBlocks.push({
-          type: 'paragraph',
-          content: '',
-        })
-      }
-      origIdx++
-    }
-  }
-  
-  return resultBlocks.length > 0 ? resultBlocks : [{ type: 'paragraph', content: '' }]
-}
 
 // Hook to track hovered block globally (single listener, throttled with RAF)
 function useHoveredBlockId() {
@@ -270,17 +172,6 @@ function useHoveredBlockId() {
     document.addEventListener('mousemove', onMouseMove)
     document.addEventListener('mouseleave', onMouseLeave, true)
     
-    // Listen for mode changes to immediately clear hover
-    const handleModeChange = (e) => {
-      const newMode = e.detail
-      if (newMode === 'drawing') {
-        // Immediately clear hover when switching to drawing mode
-        setBlockElement(null)
-      }
-    }
-    
-    window.addEventListener('modeChange', handleModeChange)
-    
     // Check visibility periodically and clear hover if panel is hidden
     const visibilityCheck = setInterval(() => {
       if (!isEditorVisible() && blockElement) {
@@ -291,7 +182,6 @@ function useHoveredBlockId() {
     return () => {
       document.removeEventListener('mousemove', onMouseMove)
       document.removeEventListener('mouseleave', onMouseLeave, true)
-      window.removeEventListener('modeChange', handleModeChange)
       clearInterval(visibilityCheck)
       if (raf) {
         cancelAnimationFrame(raf)
@@ -484,21 +374,7 @@ function FloatingCopyButton({ editor }) {
       checkVisibility()
     }, 100)
 
-    // Listen for mode changes to immediately hide button
-    const handleModeChange = (e) => {
-      const newMode = e.detail
-      if (newMode === 'drawing') {
-        // Immediately hide when switching to drawing mode
-        setIsPanelVisible(false)
-        setBlockRect(null)
-        setOpacity(0)
-      } else {
-        // Check visibility when switching to other modes
-        setTimeout(checkVisibility, 50)
-      }
-    }
-
-    // Check visibility on resize and when mode changes
+    // Check visibility on resize
     const handleResize = () => {
       checkVisibility()
     }
@@ -515,7 +391,6 @@ function FloatingCopyButton({ editor }) {
     }
     
     window.addEventListener('resize', handleResize)
-    window.addEventListener('modeChange', handleModeChange)
     
     // Also check periodically in case ResizeObserver isn't available
     // Check more frequently to catch any visibility changes
@@ -524,7 +399,6 @@ function FloatingCopyButton({ editor }) {
     return () => {
       clearTimeout(initialCheck)
       window.removeEventListener('resize', handleResize)
-      window.removeEventListener('modeChange', handleModeChange)
       if (resizeObserver && editorEl) {
         resizeObserver.unobserve(editorEl)
       }
@@ -775,13 +649,10 @@ function FloatingCopyButton({ editor }) {
 }
 
 export default function NotesPanel({ docId }) {
-  const [textMode, setTextMode] = useState('text')
-  const [markdownText, setMarkdownText] = useState('')
   const [loading, setLoading] = useState(true)
   const editor = useCreateBlockNote({ schema, initialContent: defaultBlocks })
   const saveTimeout = useRef(null)
   const lastSavedContent = useRef(null)
-  const lastSavedTextMode = useRef(null)
   const { colorScheme } = useTheme()
   const { setIsSyncing } = useSync()
 
@@ -805,18 +676,6 @@ export default function NotesPanel({ docId }) {
         editor.replaceBlocks(editor.document, defaultBlocks)
         lastSavedContent.current = JSON.stringify(defaultBlocks)
       }
-      // Load text mode
-      if (content?.text_mode) {
-        setTextMode(content.text_mode)
-        lastSavedTextMode.current = content.text_mode
-      } else {
-        setTextMode('text')
-        lastSavedTextMode.current = 'text'
-      }
-      // Also load markdown if stored
-      const md = await blocksToMarkdownPreservingEmpty(editor, editor.document)
-      setMarkdownText(md)
-      
       // Focus on second block
       setTimeout(() => {
         const blocks = editor.document
@@ -854,39 +713,6 @@ export default function NotesPanel({ docId }) {
     }
   }
 
-  async function handleModeChange(newMode) {
-    if (newMode === 'markdown' && textMode === 'text') {
-      // Convert blocks to markdown
-      const md = await blocksToMarkdownPreservingEmpty(editor, editor.document)
-      setMarkdownText(md)
-    } else if (newMode === 'text' && textMode === 'markdown') {
-      // Convert markdown to blocks
-      const blocks = await markdownToBlocksPreservingEmpty(editor, markdownText)
-      editor.replaceBlocks(editor.document, blocks)
-      saveContent()
-    }
-    setTextMode(newMode)
-    // Save text mode preference
-    if (newMode !== lastSavedTextMode.current) {
-      lastSavedTextMode.current = newMode
-      try {
-        await updateDocumentContent(docId, { text_mode: newMode })
-      } catch (err) {
-        console.error('Failed to save text mode:', err)
-      }
-    }
-  }
-
-  async function handleMarkdownChange(value) {
-    setMarkdownText(value)
-    if (saveTimeout.current) clearTimeout(saveTimeout.current)
-    saveTimeout.current = setTimeout(async () => {
-      // Convert and save
-      const blocks = await markdownToBlocksPreservingEmpty(editor, value)
-      editor.replaceBlocks(editor.document, blocks)
-      saveContent()
-    }, 1000)
-  }
 
   if (loading) {
     return (
@@ -897,24 +723,23 @@ export default function NotesPanel({ docId }) {
   }
 
   return (
-    <Box style={{ display: 'flex', flexDirection: 'column', height: '100%', position: 'relative' }}>
-      <Box style={{ position: 'absolute', top: 8, right: 8, zIndex: 1001 }}>
-        <SegmentedControl
-          size="xs"
-          value={textMode}
-          onChange={handleModeChange}
-          data={[
-            { label: 'Text', value: 'text' },
-            { label: 'Markdown', value: 'markdown' },
-          ]}
-        />
-      </Box>
+    <Box 
+      style={{ 
+        display: 'flex', 
+        flexDirection: 'column', 
+        height: '100%', 
+        position: 'relative',
+        backgroundColor: colorScheme === 'dark' ? '#1a1b1e' : '#f8f9fa',
+      }}
+    >
       <Box 
         style={{ 
           flex: 1, 
           overflow: 'auto', 
-          paddingTop: 40, 
-          paddingBottom: 400,
+          paddingTop: '48px',
+          paddingLeft: '200px',
+          paddingRight: '200px',
+          paddingBottom: '48px',
           scrollbarWidth: 'none', /* Firefox */
           msOverflowStyle: 'none', /* IE and Edge */
         }}
@@ -924,31 +749,21 @@ export default function NotesPanel({ docId }) {
           },
         }}
       >
-        {textMode === 'text' ? (
-          <>
-            <BlockNoteView editor={editor} theme={colorScheme} onChange={handleChange} />
-            <FloatingCopyButton editor={editor} />
-          </>
-        ) : (
-          <Textarea
-            value={markdownText}
-            onChange={(e) => handleMarkdownChange(e.target.value)}
-            placeholder="Write markdown here..."
-            styles={{
-              root: { height: '100%' },
-              wrapper: { height: '100%' },
-              input: { 
-                height: '100%',
-                fontFamily: 'monospace',
-                fontSize: 14,
-                border: 'none',
-                resize: 'none',
-                paddingBottom: 400,
-                boxSizing: 'content-box',
-              },
-            }}
-          />
-        )}
+        <Box
+          style={{
+            backgroundColor: colorScheme === 'dark' ? 'var(--mantine-color-dark-7)' : '#ffffff',
+            minHeight: '1200px',
+            paddingTop: '24px',
+            paddingLeft: '24px',
+            paddingRight: '24px',
+            paddingBottom: '400px',
+            border: colorScheme === 'dark' ? '1px solid var(--mantine-color-dark-4)' : '1px solid #e0e0e0',
+            borderRadius: '5px',
+          }}
+        >
+          <BlockNoteView editor={editor} theme={colorScheme} onChange={handleChange} />
+        </Box>
+        <FloatingCopyButton editor={editor} />
       </Box>
     </Box>
   )
