@@ -2,6 +2,7 @@ import { getUserLastVisited, setUserLastVisited as setUserLastVisitedDB } from '
 import { supabase } from './supabase'
 
 const LAST_VISITED_KEY = 'thinkpost_last_visited'
+const LAST_VISITED_KEY_V2 = 'thinkpost_last_visited_v2'
 
 // Get last visited project and document
 // For logged-in users: fetch from database
@@ -100,4 +101,45 @@ export async function setLastVisited(projectId, docId) {
   data.docId = docId
   
   localStorage.setItem(LAST_VISITED_KEY, JSON.stringify(data))
+}
+
+// Get last visited document number for a project (v2 - uses document numbers)
+export function getLastDocumentNumberForProject(projectId) {
+  const stored = localStorage.getItem(LAST_VISITED_KEY_V2)
+  if (!stored) return null
+  try {
+    const data = JSON.parse(stored)
+    if (data.projects && data.projects[projectId]) {
+      return data.projects[projectId]
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
+// Set last visited document number for a project (v2 - uses document numbers)
+export function setLastVisitedDocumentNumber(projectId, documentNumber) {
+  const stored = localStorage.getItem(LAST_VISITED_KEY_V2)
+  let data = {}
+  
+  if (stored) {
+    try {
+      data = JSON.parse(stored)
+    } catch {
+      data = {}
+    }
+  }
+  
+  // Store per-project
+  if (!data.projects) {
+    data.projects = {}
+  }
+  data.projects[projectId] = documentNumber
+  
+  // Store global
+  data.lastProjectId = projectId
+  data.lastDocumentNumber = documentNumber
+  
+  localStorage.setItem(LAST_VISITED_KEY_V2, JSON.stringify(data))
 }

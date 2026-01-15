@@ -4,7 +4,7 @@ import './Sidebar.css'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useEffect, useState, useRef } from 'react'
 import { useProjectContext } from '../context/ProjectContext'
-import { setLastVisited, getLastDocumentForProject } from '../lib/lastVisited'
+import { getLastDocumentNumberForProject, setLastVisitedDocumentNumber } from '../lib/lastVisited'
 import { updateDocument, deleteDocument } from '../lib/api'
 import { useAuth } from '../context/AuthContext'
 import { isDrawing } from '../lib/documentType'
@@ -37,24 +37,27 @@ export default function Sidebar({ onCollapse, onAddDocument }) {
     if (!loading && !docId && documents.length > 0 && project) {
       // For guest users: always use first document
       // For logged-in users: check for last visited document for this project
-      let docToUse = documents[0].id
+      let docNumberToUse = documents[0].document_number
       
       if (user) {
-        // Only check last visited for logged-in users
-        const lastDocId = getLastDocumentForProject(project.id)
-        const lastDocIdStr = lastDocId ? String(lastDocId) : null
-        const foundDoc = lastDocIdStr ? documents.find(d => String(d.id) === lastDocIdStr) : null
-        if (foundDoc) {
-          docToUse = foundDoc.id
+        // Try to find by document number first (new system)
+        const lastDocNumber = getLastDocumentNumberForProject(project.id)
+        if (lastDocNumber) {
+          const foundDoc = documents.find(d => d.document_number === lastDocNumber)
+          if (foundDoc) {
+            docNumberToUse = foundDoc.document_number
+            navigate(`/${project.id}/${docNumberToUse}`, { replace: true })
+            return
+          }
         }
       }
       
-      navigate(`/${project.id}/${docToUse}`, { replace: true })
+      navigate(`/${project.id}/${docNumberToUse}`, { replace: true })
     }
   }, [docId, documents, loading, project, navigate, user])
 
-  // Save last visited whenever docId changes, but only if:
-  // 1. The docId actually exists in the current project's documents
+  // Save last visited whenever docId (document_number) changes, but only if:
+  // 1. The document_number actually exists in the current project's documents
   // 2. We're not in the middle of a navigation/login flow
   // 3. Add a small delay to prevent saving during rapid navigation
   useEffect(() => {
@@ -62,23 +65,25 @@ export default function Sidebar({ onCollapse, onAddDocument }) {
     
     // Add a small delay to prevent saving during rapid navigation changes
     const timeoutId = setTimeout(() => {
-      // Verify the document exists in the current project
-      const docExists = documents.some(d => String(d.id) === String(docId))
-      if (!docExists) {
+      // docId in URL is now document_number
+      const documentNumber = parseInt(docId, 10)
+      if (isNaN(documentNumber)) {
         return
       }
       
-      // Verify the docId matches the project (safety check)
+      // Verify the document exists in the current project
+      const doc = documents.find(d => d.document_number === documentNumber)
+      if (!doc) {
+        return
+      }
+      
+      // Verify the document matches the project (safety check)
       if (project && documents.length > 0) {
         savingRef.current = true
-        setLastVisited(project.id, docId)
-          .then(() => {
-            savingRef.current = false
-          })
-          .catch(err => {
-            console.error('Sidebar: Failed to save last visited:', err)
-            savingRef.current = false
-          })
+        
+        // Store document number (works for both text and drawing documents)
+        setLastVisitedDocumentNumber(project.id, documentNumber)
+        savingRef.current = false
       }
     }, 200) // 200ms delay to allow navigation to settle
     
@@ -96,8 +101,8 @@ export default function Sidebar({ onCollapse, onAddDocument }) {
   async function handleAddDocument(documentType = 'text') {
     const title = documentType === 'drawing' ? 'Untitled drawing' : 'Untitled'
     const doc = await addDocument(title, documentType)
-    if (doc && project) {
-      navigate(`/${project.id}/${doc.id}`)
+    if (doc && project && doc.document_number) {
+      navigate(`/${project.id}/${doc.document_number}`)
     }
   }
 
@@ -127,7 +132,8 @@ export default function Sidebar({ onCollapse, onAddDocument }) {
   async function handleDelete() {
     if (!deleteConfirm || documents.length <= 1) return
     
-    const deletingCurrentDoc = String(docId) === String(deleteConfirm.id)
+    // docId in URL is now document_number
+    const deletingCurrentDoc = docId && parseInt(docId, 10) === deleteConfirm.document_number
     await deleteDocument(deleteConfirm.id)
     await refreshDocuments()
     setDeleteConfirm(null)
@@ -136,7 +142,7 @@ export default function Sidebar({ onCollapse, onAddDocument }) {
       // Navigate to first available document
       const remaining = documents.filter(d => d.id !== deleteConfirm.id)
       if (remaining.length > 0) {
-        navigate(`/${project.id}/${remaining[0].id}`)
+        navigate(`/${project.id}/${remaining[0].document_number}`)
       }
     }
   }
@@ -174,11 +180,12 @@ export default function Sidebar({ onCollapse, onAddDocument }) {
         ) : (
           <div className="sidebar-documents-grid">
             {sortedDocuments.map((doc) => {
-              const isActive = docId !== undefined && String(docId) === String(doc.id)
+              // docId in URL is now document_number
+              const isActive = docId !== undefined && parseInt(docId, 10) === doc.document_number
               return (
                 <Box
                   key={doc.id}
-                  onClick={() => navigate(`/${project.id}/${doc.id}`)}
+                  onClick={() => navigate(`/${project.id}/${doc.document_number}`)}
                   onDoubleClick={() => handleDoubleClick(doc)}
                   p="xs"
                   className="sidebar-item"

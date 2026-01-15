@@ -2,7 +2,7 @@ import { useParams } from 'react-router-dom'
 import NotesPanel from '../components/NotesPanel'
 import DrawingPanel from '../components/DrawingPanel'
 import { useState, useEffect, useRef } from 'react'
-import { getDocument } from '../lib/api'
+import { getDocumentByNumber } from '../lib/api'
 import { getDocumentType } from '../lib/documentType'
 import { useAuth } from '../context/AuthContext'
 import { useProjectContext } from '../context/ProjectContext'
@@ -61,9 +61,9 @@ export default function DocumentPage() {
     return () => clearTimeout(timer)
   }, [projectId, project, switchProject, projectLoading])
 
-  // Load document when docId changes
+  // Load document when docId (document_number) changes
   useEffect(() => {
-    if (!docId) {
+    if (!docId || !projectId) {
       return
     }
     
@@ -81,15 +81,23 @@ export default function DocumentPage() {
     return () => {
       clearTimeout(timer)
     }
-  }, [docId, user, authLoading])
+  }, [docId, projectId, user, authLoading])
 
   async function loadDocument() {
     setLoading(true)
     try {
-      const doc = await getDocument(docId)
+      // docId in URL is now document_number
+      const documentNumber = parseInt(docId, 10)
+      if (isNaN(documentNumber)) {
+        console.error('[DocumentPage] Invalid document number:', docId)
+        setDocument(null)
+        return
+      }
+      const doc = await getDocumentByNumber(projectId, documentNumber)
       setDocument(doc)
     } catch (err) {
       console.error('[DocumentPage] Failed to load document:', err)
+      setDocument(null)
     } finally {
       setLoading(false)
     }
@@ -116,9 +124,9 @@ export default function DocumentPage() {
   return (
     <div style={{ height: '100%', width: '100%' }}>
       {documentType === 'drawing' ? (
-        <DrawingPanel docId={docId} />
+        <DrawingPanel docId={document.id} />
       ) : (
-        <NotesPanel docId={docId} />
+        <NotesPanel docId={document.id} />
       )}
     </div>
   )

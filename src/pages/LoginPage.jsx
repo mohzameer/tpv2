@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { Container, Paper, TextInput, PasswordInput, Button, Title, Text, Stack, Anchor, Alert } from '@mantine/core'
 import { useAuth } from '../context/AuthContext'
 import { getUserLastVisited, getProjects, getDocuments } from '../lib/api'
+import { getLastDocumentNumberForProject } from '../lib/lastVisited'
 import { supabase } from '../lib/supabase'
 
 export default function LoginPage() {
@@ -69,21 +70,24 @@ export default function LoginPage() {
         }
         
         // Priority 1: If user was working on a guest project that was just claimed, stay on it
-        if (guestProjectId && guestDocId) {
+        if (guestProjectId) {
           const claimedProject = projects.find(p => p.id === guestProjectId)
           if (claimedProject) {
             const docs = await getDocuments(claimedProject.id)
-            const doc = docs.find(d => {
-              const docIdNum = typeof d.id === 'number' ? d.id : parseInt(d.id, 10)
-              const guestDocIdNum = typeof guestDocId === 'number' ? guestDocId : parseInt(guestDocId, 10)
-              return docIdNum === guestDocIdNum
-            })
             
-            if (doc) {
-              navigate(`/${claimedProject.id}/${doc.id}`, { replace: true })
-              return
-            } else if (docs.length > 0) {
-              navigate(`/${claimedProject.id}/${docs[0].id}`, { replace: true })
+            // Try to find by document number
+            const lastDocNumber = getLastDocumentNumberForProject(guestProjectId)
+            if (lastDocNumber) {
+              const doc = docs.find(d => d.document_number === lastDocNumber)
+              if (doc && doc.document_number) {
+                navigate(`/${claimedProject.id}/${doc.document_number}`, { replace: true })
+                return
+              }
+            }
+            
+            // If not found, use first document
+            if (docs.length > 0 && docs[0].document_number) {
+              navigate(`/${claimedProject.id}/${docs[0].document_number}`, { replace: true })
               return
             }
           }
@@ -92,21 +96,24 @@ export default function LoginPage() {
         // Priority 2: Get last visited from user profile (for returning users)
         const lastVisited = await getUserLastVisited()
         
-        if (lastVisited?.projectId && lastVisited?.docId && projects.length > 0) {
+        if (lastVisited?.projectId && projects.length > 0) {
           const project = projects.find(p => p.id === lastVisited.projectId)
           if (project) {
             const docs = await getDocuments(project.id)
-            const doc = docs.find(d => {
-              const docIdNum = typeof d.id === 'number' ? d.id : parseInt(d.id, 10)
-              const lastDocIdNum = typeof lastVisited.docId === 'number' ? lastVisited.docId : parseInt(lastVisited.docId, 10)
-              return docIdNum === lastDocIdNum
-            })
             
-            if (doc) {
-              navigate(`/${project.id}/${doc.id}`, { replace: true })
-              return
-            } else if (docs.length > 0) {
-              navigate(`/${project.id}/${docs[0].id}`, { replace: true })
+            // Try to find by document number
+            const lastDocNumber = getLastDocumentNumberForProject(project.id)
+            if (lastDocNumber) {
+              const doc = docs.find(d => d.document_number === lastDocNumber)
+              if (doc && doc.document_number) {
+                navigate(`/${project.id}/${doc.document_number}`, { replace: true })
+                return
+              }
+            }
+            
+            // If not found, use first document
+            if (docs.length > 0 && docs[0].document_number) {
+              navigate(`/${project.id}/${docs[0].document_number}`, { replace: true })
               return
             }
           }
@@ -116,8 +123,8 @@ export default function LoginPage() {
         if (projects.length > 0) {
           const firstProject = projects[0]
           const docs = await getDocuments(firstProject.id)
-          if (docs.length > 0) {
-            navigate(`/${firstProject.id}/${docs[0].id}`, { replace: true })
+          if (docs.length > 0 && docs[0].document_number) {
+            navigate(`/${firstProject.id}/${docs[0].document_number}`, { replace: true })
             return
           }
           navigate(`/${firstProject.id}`, { replace: true })
