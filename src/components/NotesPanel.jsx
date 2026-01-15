@@ -15,6 +15,7 @@ import FloatingLinkButton from './FloatingLinkButton'
 import DocumentLinkButtons, { checkOverlap, findNearestNonOverlappingY } from './DocumentLinkButtons'
 import DocumentLinkModal from './DocumentLinkModal'
 import { useProjectContext } from '../context/ProjectContext'
+import { useShowLinks } from '../context/ShowLinksContext'
 import { isDrawing } from '../lib/documentType'
 
 // Only keep markdown-compatible block types
@@ -669,6 +670,7 @@ export default function NotesPanel({ docId }) {
   const { setIsSyncing } = useSync()
   const { setEditor } = useEditor()
   const { project } = useProjectContext()
+  const [showLinks] = useShowLinks()
 
   // Load content when docId changes or when auth state changes (user logs in/out)
   const { user } = useAuth()
@@ -912,30 +914,34 @@ export default function NotesPanel({ docId }) {
           >
             <BlockNoteView editor={editor} theme={colorScheme} onChange={handleChange} />
           </Box>
-          <DocumentLinkButtons
-            containerRef={whiteBackgroundRef}
-            links={links}
-            onDeleteLink={handleDeleteLink}
-          />
+          {showLinks && (
+            <DocumentLinkButtons
+              containerRef={whiteBackgroundRef}
+              links={links}
+              onDeleteLink={handleDeleteLink}
+            />
+          )}
         </Box>
         <FloatingCopyButton editor={editor} />
-        <FloatingLinkButton
-          containerRef={whiteBackgroundRef}
-          onLinkClick={(position) => {
-            // Prevent multiple button creation
-            if (isAddingLinkRef.current) return
-            isAddingLinkRef.current = true
+        {showLinks && (
+          <FloatingLinkButton
+            containerRef={whiteBackgroundRef}
+            onLinkClick={(position) => {
+              // Prevent multiple button creation
+              if (isAddingLinkRef.current) return
+              isAddingLinkRef.current = true
 
-            // Store position and open modal
-            setPendingLinkPosition(position)
-            setLinkModalOpened(true)
+              // Store position and open modal
+              setPendingLinkPosition(position)
+              setLinkModalOpened(true)
 
-            // Reset flag after a short delay
-            setTimeout(() => {
-              isAddingLinkRef.current = false
-            }, 300)
-          }}
-        />
+              // Reset flag after a short delay
+              setTimeout(() => {
+                isAddingLinkRef.current = false
+              }, 300)
+            }}
+          />
+        )}
         <DocumentLinkModal
           opened={linkModalOpened}
           onClose={() => {
