@@ -9,6 +9,7 @@ import { ProjectProvider } from './context/ProjectContext.jsx'
 import { ThemeProvider } from './context/ThemeContext.jsx'
 import { SyncProvider } from './context/SyncContext.jsx'
 import { AuthProvider } from './context/AuthContext.jsx'
+import { EditorProvider } from './context/EditorContext.jsx'
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
@@ -17,7 +18,9 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         <AuthProvider>
           <SyncProvider>
             <ProjectProvider>
-              <App />
+              <EditorProvider>
+                <App />
+              </EditorProvider>
             </ProjectProvider>
           </SyncProvider>
         </AuthProvider>
