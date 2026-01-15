@@ -304,30 +304,125 @@ export async function getDocumentContent(documentId) {
   }
   
   // Now fetch the content from documents table
-  const { data, error } = await supabase
+  // Try to include document_links - if it fails, we'll try without it
+  let { data, error } = await supabase
     .from('documents')
-    .select('notes_content, drawing_content, drawing_files, text_mode')
+    .select('notes_content, drawing_content, drawing_files, text_mode, document_links')
     .eq('id', documentId)
     .single()
-  if (error && error.code !== 'PGRST116') throw error
+  
+  // If the query fails with PGRST204 (schema cache) or 400, try without document_links
+  if (error && (error.code === 'PGRST204' || error.code === 'PGRST116')) {
+    const { data: dataWithoutLinks, error: errorWithoutLinks } = await supabase
+      .from('documents')
+      .select('notes_content, drawing_content, drawing_files, text_mode')
+      .eq('id', documentId)
+      .single()
+    
+    if (errorWithoutLinks) {
+      if (errorWithoutLinks.code === 'PGRST116') {
+        return null
+      }
+      throw errorWithoutLinks
+    }
+    
+    if (!dataWithoutLinks) {
+      return null
+    }
+    
+    // Set empty array for document_links if we couldn't fetch it
+    dataWithoutLinks.document_links = []
+    return dataWithoutLinks
+  }
+  
+  if (error) {
+    if (error.code === 'PGRST116') {
+      return null
+    }
+    throw error
+  }
+  
+  if (!data) {
+    return null
+  }
+  
+  // Ensure document_links is always an array
+  if (!data.document_links || !Array.isArray(data.document_links)) {
+    data.document_links = []
+  }
+  
   return data
 }
 
-export async function updateDocumentContent(documentId, { notes_content, drawing_content, text_mode, drawing_files }) {
+export async function updateDocumentContent(documentId, { notes_content, drawing_content, text_mode, drawing_files, document_links }) {
   const updates = {}
   if (notes_content !== undefined) updates.notes_content = notes_content
   if (drawing_content !== undefined) updates.drawing_content = drawing_content
   if (text_mode !== undefined) updates.text_mode = text_mode
   if (drawing_files !== undefined) updates.drawing_files = drawing_files
+  if (document_links !== undefined) updates.document_links = document_links
   
-  const { data, error } = await supabase
+  // If no updates, return early
+  if (Object.keys(updates).length === 0) {
+    return { success: true }
+  }
+  
+  // Try to update all fields together
+  const { error } = await supabase
     .from('documents')
     .update(updates)
     .eq('id', documentId)
-    .select()
-    .single()
-  if (error) throw error
-  return data
+  
+  if (error) {
+    // If it's a schema cache issue with document_links, don't throw - just warn
+    if (error.code === 'PGRST204' && document_links !== undefined) {
+      // Try updating other fields if there are any
+      const updatesWithoutLinks = { ...updates }
+      delete updatesWithoutLinks.document_links
+      
+      if (Object.keys(updatesWithoutLinks).length > 0) {
+        const { error: retryError } = await supabase
+          .from('documents')
+          .update(updatesWithoutLinks)
+          .eq('id', documentId)
+        
+        if (retryError) {
+          throw retryError
+        } else {
+          return { success: false, document_links_skipped: true, error: 'PGRST204' }
+        }
+      } else {
+        // Only document_links was being updated, and it failed
+        return { success: false, document_links_skipped: true, error: 'PGRST204' }
+      }
+    } else {
+      throw error
+    }
+  }
+  
+  return { success: true }
+}
+
+// Update document links
+export async function updateDocumentLinks(documentId, links) {
+  try {
+    
+    const { data, error } = await supabase
+      .from('documents')
+      .update({ document_links: links })
+      .eq('id', documentId)
+      .select('id, document_links')
+      .single()
+    
+    if (error) {
+      throw error
+    }
+    
+    
+    return data
+  } catch (err) {
+    throw err
+  }
 }
 
 // User Profiles - Last Visited

@@ -6,11 +6,17 @@ import { BlockNoteView } from '@blocknote/mantine'
 import '@blocknote/mantine/style.css'
 import './NotesPanel.css'
 import { useState, useEffect, useRef, useMemo } from 'react'
-import { getDocumentContent, updateDocumentContent } from '../lib/api'
+import { getDocumentContent, updateDocumentContent, updateDocumentLinks } from '../lib/api'
 import { useTheme } from '../context/ThemeContext'
 import { useSync } from '../context/SyncContext'
 import { useAuth } from '../context/AuthContext'
 import { useEditor } from '../context/EditorContext'
+import FloatingLinkButton from './FloatingLinkButton'
+import DocumentLinkButtons, { checkOverlap, findNearestNonOverlappingY } from './DocumentLinkButtons'
+import DocumentLinkModal from './DocumentLinkModal'
+import { useProjectContext } from '../context/ProjectContext'
+import { useShowLinks } from '../context/ShowLinksContext'
+import { isDrawing } from '../lib/documentType'
 
 // Only keep markdown-compatible block types
 const { 
@@ -654,9 +660,17 @@ export default function NotesPanel({ docId }) {
   const editor = useCreateBlockNote({ schema, initialContent: defaultBlocks })
   const saveTimeout = useRef(null)
   const lastSavedContent = useRef(null)
+  const whiteBackgroundRef = useRef(null)
+  const [links, setLinks] = useState([]) // Store document/drawing links
+  const [linkModalOpened, setLinkModalOpened] = useState(false)
+  const [pendingLinkPosition, setPendingLinkPosition] = useState(null)
+  const linkIdCounter = useRef(0) // Counter for generating unique link IDs
+  const isAddingLinkRef = useRef(false) // Prevent multiple button creation
   const { colorScheme } = useTheme()
   const { setIsSyncing } = useSync()
   const { setEditor } = useEditor()
+  const { project } = useProjectContext()
+  const [showLinks] = useShowLinks()
 
   // Load content when docId changes or when auth state changes (user logs in/out)
   const { user } = useAuth()
@@ -680,14 +694,51 @@ export default function NotesPanel({ docId }) {
   async function loadContent() {
     try {
       const content = await getDocumentContent(docId)
-      if (content?.notes_content && Array.isArray(content.notes_content) && content.notes_content.length > 0) {
-        editor.replaceBlocks(editor.document, content.notes_content)
-        lastSavedContent.current = JSON.stringify(content.notes_content)
+      if (!content) {
+        setLoading(false)
+        return
+      }
+      
+      // Load notes content
+      // Check if notes_content exists and is a valid array
+      if (content.notes_content !== null && content.notes_content !== undefined) {
+        if (Array.isArray(content.notes_content) && content.notes_content.length > 0) {
+          editor.replaceBlocks(editor.document, content.notes_content)
+          lastSavedContent.current = JSON.stringify(content.notes_content)
+        } else if (Array.isArray(content.notes_content) && content.notes_content.length === 0) {
+          // Empty array - set default blocks
+          editor.replaceBlocks(editor.document, defaultBlocks)
+          lastSavedContent.current = JSON.stringify(defaultBlocks)
+        } else {
+          // Invalid format - set default blocks
+          editor.replaceBlocks(editor.document, defaultBlocks)
+          lastSavedContent.current = JSON.stringify(defaultBlocks)
+        }
       } else {
-        // Set default blocks for new document
+        // No notes_content - set default blocks
         editor.replaceBlocks(editor.document, defaultBlocks)
         lastSavedContent.current = JSON.stringify(defaultBlocks)
       }
+      
+      // Load document links
+      if (content.document_links && Array.isArray(content.document_links)) {
+        setLinks(content.document_links)
+        // Update linkIdCounter to avoid ID conflicts
+        if (content.document_links.length > 0) {
+          const maxId = content.document_links.reduce((max, link) => {
+            const match = link.id?.match(/link-(\d+)/)
+            if (match) {
+              const num = parseInt(match[1], 10)
+              return Math.max(max, num)
+            }
+            return max
+          }, 0)
+          linkIdCounter.current = maxId + 1
+        }
+      } else {
+        setLinks([])
+      }
+      
       // Focus on second block
       setTimeout(() => {
         const blocks = editor.document
@@ -699,6 +750,88 @@ export default function NotesPanel({ docId }) {
       console.error('Failed to load notes:', err)
     } finally {
       setLoading(false)
+    }
+  }
+  
+  async function saveLinks(linksToSave) {
+    if (!docId) {
+      return { success: false }
+    }
+    
+    try {
+      setIsSyncing(true)
+      const result = await updateDocumentContent(docId, { document_links: linksToSave })
+      
+      if (result) {
+        return result
+      } else {
+        return { success: false }
+      }
+    } catch (err) {
+      // If it's a schema cache issue, return error info
+      if (err?.code === 'PGRST204') {
+        return { success: false, document_links_skipped: true, error: 'PGRST204' }
+      }
+      return { success: false, error: err }
+    } finally {
+      setIsSyncing(false)
+    }
+  }
+  
+  function handleLinkSelected(selectedDocument, selectedProject) {
+    if (!pendingLinkPosition || !selectedProject) return
+    
+    const buttonSize = 32
+    const spacing = 4
+    const position = pendingLinkPosition
+    
+    // Check if position would overlap
+    if (checkOverlap(position.y, links, buttonSize, spacing)) {
+      const adjustment = findNearestNonOverlappingY(position.y, links, buttonSize, spacing)
+      if (adjustment !== null && Math.abs(adjustment) < buttonSize * 10) {
+        createLink(selectedDocument, selectedProject, position, adjustment)
+      }
+    } else {
+      createLink(selectedDocument, selectedProject, position, 0)
+    }
+    
+    setPendingLinkPosition(null)
+    setLinkModalOpened(false)
+  }
+  
+  async function createLink(selectedDocument, selectedProject, position, adjustment) {
+    const linkType = isDrawing(selectedDocument) ? 'drawing' : 'document'
+    const newLink = {
+      id: `link-${linkIdCounter.current++}`,
+      targetDocumentId: selectedDocument.id,
+      targetDocumentNumber: selectedDocument.document_number,
+      targetProjectId: selectedProject.id,
+      type: linkType,
+      title: selectedDocument.title || (linkType === 'document' ? 'Untitled' : 'Untitled drawing'),
+      x: position.x,
+      y: position.y,
+      adjustedY: adjustment,
+      createdAt: new Date().toISOString(),
+    }
+    
+    const updatedLinks = [...links, newLink]
+    setLinks(updatedLinks)
+    const result = await saveLinks(updatedLinks)
+    
+    // If save failed due to cache issue, remove the link from state
+    if (result && result.document_links_skipped) {
+      setLinks(links) // Revert to previous state
+    }
+  }
+  
+  async function handleDeleteLink(linkId) {
+    const updatedLinks = links.filter(link => link.id !== linkId)
+    setLinks(updatedLinks)
+    const result = await saveLinks(updatedLinks)
+    
+    // If save failed due to cache issue, revert the deletion
+    if (result && result.document_links_skipped) {
+      setLinks(links) // Revert to previous state
     }
   }
 
@@ -762,20 +895,63 @@ export default function NotesPanel({ docId }) {
         }}
       >
         <Box
+          ref={whiteBackgroundRef}
           style={{
             backgroundColor: colorScheme === 'dark' ? 'var(--mantine-color-dark-7)' : '#ffffff',
             minHeight: '1200px',
             paddingTop: '24px',
-            paddingLeft: '24px',
+            paddingLeft: '16px',
             paddingRight: '24px',
             paddingBottom: '400px',
             border: colorScheme === 'dark' ? '1px solid var(--mantine-color-dark-4)' : '1px solid #e0e0e0',
             borderRadius: '5px',
+            position: 'relative', // Make container relative for absolute positioned buttons
           }}
         >
-          <BlockNoteView editor={editor} theme={colorScheme} onChange={handleChange} />
+          <Box
+            style={{
+              paddingLeft: '36px', // Extra left padding to make room for buttons (32px button + 8px gap - 4px spacing)
+            }}
+          >
+            <BlockNoteView editor={editor} theme={colorScheme} onChange={handleChange} />
+          </Box>
+          {showLinks && (
+            <DocumentLinkButtons
+              containerRef={whiteBackgroundRef}
+              links={links}
+              onDeleteLink={handleDeleteLink}
+            />
+          )}
         </Box>
         <FloatingCopyButton editor={editor} />
+        {showLinks && (
+          <FloatingLinkButton
+            containerRef={whiteBackgroundRef}
+            onLinkClick={(position) => {
+              // Prevent multiple button creation
+              if (isAddingLinkRef.current) return
+              isAddingLinkRef.current = true
+
+              // Store position and open modal
+              setPendingLinkPosition(position)
+              setLinkModalOpened(true)
+
+              // Reset flag after a short delay
+              setTimeout(() => {
+                isAddingLinkRef.current = false
+              }, 300)
+            }}
+          />
+        )}
+        <DocumentLinkModal
+          opened={linkModalOpened}
+          onClose={() => {
+            setLinkModalOpened(false)
+            setPendingLinkPosition(null)
+          }}
+          onSelectDocument={handleLinkSelected}
+          currentDocumentId={docId ? docId : null}
+        />
       </Box>
     </Box>
   )

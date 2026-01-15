@@ -1,10 +1,11 @@
-import { Group, ActionIcon, Loader, Text, TextInput, Menu, Button } from '@mantine/core'
-import { IconSun, IconMoon, IconUser, IconCloud, IconSettings, IconLogout, IconLogin, IconFolder, IconHelp, IconFileImport } from '@tabler/icons-react'
+import { Group, ActionIcon, Loader, Text, TextInput, Menu, Button, Switch } from '@mantine/core'
+import { IconSun, IconMoon, IconUser, IconCloud, IconSettings, IconLogout, IconLogin, IconFolder, IconHelp, IconFileImport, IconLink } from '@tabler/icons-react'
 import { useTheme } from '../context/ThemeContext'
 import { useSync } from '../context/SyncContext'
 import { useProjectContext } from '../context/ProjectContext'
 import { useAuth } from '../context/AuthContext'
 import { useEditor } from '../context/EditorContext'
+import { useShowLinks } from '../context/ShowLinksContext'
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
@@ -19,6 +20,7 @@ export default function Header() {
   const { project, refreshDocuments } = useProjectContext()
   const { user, signOut } = useAuth()
   const { editor } = useEditor()
+  const [showLinks, setShowLinks] = useShowLinks()
   const navigate = useNavigate()
   const { docId } = useParams()
   const [editing, setEditing] = useState(false)
@@ -135,26 +137,42 @@ export default function Header() {
 
       <Group gap="xs">
         {docId && (
-          <Button
-            variant="subtle"
-            onClick={() => setShowImportModal(true)}
-            size="xs"
-            leftSection={<IconFileImport size={16} />}
-            styles={{
-              root: {
-                height: '36px',
-                paddingLeft: '12px',
-                paddingRight: '12px',
-                fontWeight: 500,
-                color: colorScheme === 'dark' ? '#9ca3af' : '#6b7280',
-                '&:hover': {
-                  backgroundColor: colorScheme === 'dark' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)',
+          <>
+            <Switch
+              checked={showLinks}
+              onChange={(e) => setShowLinks(e.currentTarget.checked)}
+              size="sm"
+              label="Show links"
+              labelPosition="left"
+              styles={{
+                label: {
+                  fontSize: '12px',
+                  color: colorScheme === 'dark' ? '#9ca3af' : '#6b7280',
+                  marginRight: '8px',
                 },
-              },
-            }}
-          >
-            md
-          </Button>
+              }}
+            />
+            <Button
+              variant="subtle"
+              onClick={() => setShowImportModal(true)}
+              size="xs"
+              leftSection={<IconFileImport size={16} />}
+              styles={{
+                root: {
+                  height: '36px',
+                  paddingLeft: '12px',
+                  paddingRight: '12px',
+                  fontWeight: 500,
+                  color: colorScheme === 'dark' ? '#9ca3af' : '#6b7280',
+                  '&:hover': {
+                    backgroundColor: colorScheme === 'dark' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)',
+                  },
+                },
+              }}
+            >
+              md
+            </Button>
+          </>
         )}
         <ActionIcon variant="transparent" size="lg" style={{ cursor: 'default' }}>
           {isSyncing ? (
