@@ -169,6 +169,25 @@ export async function claimGuestProjects() {
   }
 }
 
+// Get project by ID (read-only, for checking project existence/ownership)
+// This does NOT modify the project and is used to check if a project exists
+// when accessing via URL
+export async function getProjectById(projectId) {
+  const { data, error } = await supabase
+    .from('projects')
+    .select('*')
+    .eq('id', projectId)
+    .single()
+  
+  if (error) {
+    if (error.code === 'PGRST116') {
+      return null // Project not found
+    }
+    throw error
+  }
+  return data
+}
+
 export async function deleteProject(id) {
   const { error } = await supabase.from('projects').delete().eq('id', id)
   if (error) throw error
@@ -202,7 +221,44 @@ export async function getDocument(documentId) {
 
 // Get document by project_id and document_number
 // Works for both text and drawing documents
+// Verifies project ownership before returning the document
 export async function getDocumentByNumber(projectId, documentNumber) {
+  // First verify the project belongs to the current user/guest
+  const { data: { user } } = await supabase.auth.getUser()
+  
+  // Get the project to verify ownership
+  const { data: project, error: projectError } = await supabase
+    .from('projects')
+    .select('owner_id, guest_id')
+    .eq('id', projectId)
+    .single()
+  
+  if (projectError || !project) {
+    throw new Error('Project not found')
+  }
+  
+  // Verify ownership: user must match owner_id, or if no user, must match guest_id
+  if (user) {
+    if (project.owner_id !== user.id) {
+      console.error('getDocumentByNumber: Document does not belong to current user. Project owner:', project.owner_id, 'Current user:', user.id)
+      throw new Error('Document not found or access denied')
+    }
+  } else {
+    const guestId = getGuestId()
+    if (project.guest_id !== guestId) {
+      // If project has an owner_id, guest cannot access it
+      if (project.owner_id) {
+        console.error('getDocumentByNumber: Guest user cannot access project owned by signed-in user. Project owner:', project.owner_id)
+        throw new Error('Document not found or access denied')
+      }
+      if (project.guest_id !== guestId) {
+        console.error('getDocumentByNumber: Document does not belong to current guest. Project guest:', project.guest_id, 'Current guest:', guestId)
+        throw new Error('Document not found or access denied')
+      }
+    }
+  }
+  
+  // Now fetch the document
   const { data, error } = await supabase
     .from('documents')
     .select('*')

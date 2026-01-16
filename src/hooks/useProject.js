@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { getProjects, createProject, getDocuments, createDocument, deleteProject } from '../lib/api'
+import { getProjects, createProject, getDocuments, createDocument, deleteProject, getProjectById } from '../lib/api'
 import { getLastVisited, getLastDocumentNumberForProject, setLastVisitedDocumentNumber } from '../lib/lastVisited'
 import { supabase } from '../lib/supabase'
 
@@ -94,6 +94,31 @@ export function useProject() {
         if (urlProject) {
           currentProject = urlProject
           foundUrlProject = true
+        } else {
+          // Project not in user's project list - check if it exists and what its ownership is
+          // This handles the case where a guest tries to access a project that belongs to a signed-in user
+          const { data: { user } } = await supabase.auth.getUser()
+          const projectData = await getProjectById(urlProjectId)
+          
+          if (projectData) {
+            // Project exists but is not in user's list
+            if (!user && projectData.owner_id) {
+              // Guest trying to access a project owned by a signed-in user
+              // Don't allow access - this would orphan the project
+              console.warn('[useProject] Guest user cannot access project owned by signed-in user:', urlProjectId)
+              // Fall back to first available project
+            } else if (user && projectData.owner_id !== user.id) {
+              // Signed-in user trying to access a project owned by another user
+              // Don't allow access
+              console.warn('[useProject] User cannot access project owned by another user:', urlProjectId)
+              // Fall back to first available project
+            } else {
+              // Project exists and user has access, but it's not in the filtered list
+              // This shouldn't happen, but if it does, we'll use the first available project
+              console.warn('[useProject] Project exists but not in filtered list:', urlProjectId)
+            }
+          }
+          // If project doesn't exist or user doesn't have access, fall back to first available project
         }
       }
 
@@ -180,6 +205,28 @@ export function useProject() {
       const projects = await getProjects()
       const targetProject = projects.find(p => p.id === projectId)
       if (!targetProject) {
+        // Project not in user's list - check if it exists and verify ownership
+        const { data: { user } } = await supabase.auth.getUser()
+        const projectData = await getProjectById(projectId)
+        
+        if (projectData) {
+          // Project exists but is not in user's list
+          if (!user && projectData.owner_id) {
+            // Guest trying to access a project owned by a signed-in user
+            console.warn('[useProject] Guest user cannot switch to project owned by signed-in user:', projectId)
+            setLoading(false)
+            switchingRef.current = false
+            return null
+          } else if (user && projectData.owner_id !== user.id) {
+            // Signed-in user trying to access a project owned by another user
+            console.warn('[useProject] User cannot switch to project owned by another user:', projectId)
+            setLoading(false)
+            switchingRef.current = false
+            return null
+          }
+        }
+        
+        // Project doesn't exist or user doesn't have access
         setLoading(false)
         switchingRef.current = false
         return null
