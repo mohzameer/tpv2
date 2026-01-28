@@ -6,13 +6,14 @@ import { useProjectContext } from '../context/ProjectContext'
 import { useAuth } from '../context/AuthContext'
 import { useEditor } from '../context/EditorContext'
 import { useShowLinks } from '../context/ShowLinksContext'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import LoginModal from './LoginModal'
 import ProjectsModal from './ProjectsModal'
 import HelpModal from './HelpModal'
 import MarkdownImportModal from './MarkdownImportModal'
+import { isText } from '../lib/documentType'
 
 // Hook to detect mobile viewport
 function useIsMobile() {
@@ -34,31 +35,59 @@ function useIsMobile() {
 export default function Header() {
   const { colorScheme, toggleColorScheme } = useTheme()
   const { isSyncing } = useSync()
-  const { project, refreshDocuments } = useProjectContext()
+  const { project, documents, refreshDocuments } = useProjectContext()
   const { user, signOut } = useAuth()
   const { editor } = useEditor()
   const [showLinks, setShowLinks] = useShowLinks()
   const navigate = useNavigate()
-  const { docId } = useParams()
+  const { projectId, docId } = useParams()
   const [editing, setEditing] = useState(false)
-  const [projectName, setProjectName] = useState('')
+  const [documentTitle, setDocumentTitle] = useState('')
   const [showLoginModal, setShowLoginModal] = useState(false)
   const [showProjectsModal, setShowProjectsModal] = useState(false)
   const [showHelpModal, setShowHelpModal] = useState(false)
   const [showImportModal, setShowImportModal] = useState(false)
   const isMobile = useIsMobile()
 
+  // Find current document from documents list
+  // Only match if the project context matches the URL's projectId
+  const isProjectSynced = project && projectId && project.id === projectId
+  const currentDocument = docId && documents && isProjectSynced
+    ? documents.find(d => d.document_number === parseInt(docId, 10))
+    : null
+  
+  // Track last synced project to avoid redundant refreshes
+  const lastSyncedProjectRef = useRef(null)
+  
+  // Refresh documents when project syncs or document not found
+  useEffect(() => {
+    if (!docId || !projectId || !isProjectSynced) return
+    
+    // Refresh once when project changes
+    if (lastSyncedProjectRef.current !== projectId) {
+      lastSyncedProjectRef.current = projectId
+      refreshDocuments()
+      return
+    }
+    
+    // Also refresh if document not found (newly created)
+    if (!currentDocument && documents.length > 0) {
+      refreshDocuments()
+    }
+  }, [docId, projectId, isProjectSynced, currentDocument, documents.length, refreshDocuments])
+
   function handleDoubleClick() {
-    if (project) {
-      setProjectName(project.name)
+    if (currentDocument) {
+      setDocumentTitle(currentDocument.title || 'Untitled')
       setEditing(true)
     }
   }
 
   async function handleSave() {
-    if (project && projectName.trim()) {
-      await supabase.from('projects').update({ name: projectName.trim() }).eq('id', project.id)
-      project.name = projectName.trim()
+    if (currentDocument && documentTitle.trim()) {
+      await supabase.from('documents').update({ title: documentTitle.trim() }).eq('id', currentDocument.id)
+      currentDocument.title = documentTitle.trim()
+      refreshDocuments()
     }
     setEditing(false)
   }
@@ -131,49 +160,77 @@ export default function Header() {
         />
         {project && (
           <>
-            {editing ? (
-              <TextInput
-                value={projectName}
-                onChange={(e) => {
-                  if (e.target.value.length <= 100) {
-                    setProjectName(e.target.value)
-                  }
-                }}
-                onBlur={handleSave}
-                onKeyDown={handleKeyDown}
-                size="xs"
-                maxLength={100}
-                autoFocus
-                styles={{ input: { fontWeight: 500 } }}
-                sx={{
-                  '@media (max-width: 768px)': {
-                    width: '120px',
-                  },
-                }}
-              />
-            ) : (
-              <Text 
-                size="sm" 
-                fw={500} 
-                onClick={() => setShowProjectsModal(true)}
-                onDoubleClick={(e) => {
-                  e.stopPropagation()
-                  handleDoubleClick()
-                }}
-                style={{ cursor: 'pointer', minWidth: 0 }}
-                sx={{
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                  maxWidth: '200px',
-                  '@media (max-width: 768px)': {
-                    maxWidth: '100px',
-                    fontSize: '12px',
-                  },
-                }}
-              >
-                {project.name}
-              </Text>
+            <Text 
+              size="sm" 
+              fw={500}
+              onClick={() => setShowProjectsModal(true)}
+              style={{ cursor: 'pointer', minWidth: 0, flexShrink: 0 }}
+              sx={{
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                maxWidth: '150px',
+                '@media (max-width: 768px)': {
+                  maxWidth: '80px',
+                  fontSize: '12px',
+                },
+              }}
+            >
+              {project.name}
+            </Text>
+            {currentDocument && (
+              <>
+                <Text 
+                  size="sm" 
+                  c={colorScheme === 'dark' ? '#6b7280' : '#9ca3af'}
+                  style={{ flexShrink: 0 }}
+                >
+                  |
+                </Text>
+                {editing ? (
+                  <TextInput
+                    value={documentTitle}
+                    onChange={(e) => {
+                      if (e.target.value.length <= 100) {
+                        setDocumentTitle(e.target.value)
+                      }
+                    }}
+                    onBlur={handleSave}
+                    onKeyDown={handleKeyDown}
+                    size="xs"
+                    maxLength={100}
+                    autoFocus
+                    styles={{ input: { fontWeight: 400 } }}
+                    sx={{
+                      '@media (max-width: 768px)': {
+                        width: '100px',
+                      },
+                    }}
+                  />
+                ) : (
+                  <Text 
+                    size="sm" 
+                    fw={400}
+                    onDoubleClick={(e) => {
+                      e.stopPropagation()
+                      handleDoubleClick()
+                    }}
+                    style={{ cursor: 'pointer', minWidth: 0 }}
+                    sx={{
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      maxWidth: '150px',
+                      '@media (max-width: 768px)': {
+                        maxWidth: '80px',
+                        fontSize: '12px',
+                      },
+                    }}
+                  >
+                    {currentDocument.title || 'Untitled'}
+                  </Text>
+                )}
+              </>
             )}
             <ActionIcon 
               variant="transparent" 
@@ -194,7 +251,7 @@ export default function Header() {
       </Group>
 
       <Group gap="xs" wrap="nowrap" style={{ flexShrink: 0 }}>
-        {docId && !isMobile && (
+        {docId && !isMobile && isText(currentDocument) && (
           <>
             <Switch
               checked={showLinks}
@@ -291,6 +348,7 @@ export default function Header() {
           opened={showImportModal} 
           onClose={() => setShowImportModal(false)}
           onImport={handleMarkdownImport}
+          editor={editor}
         />
       </Group>
     </Group>
