@@ -139,7 +139,15 @@ export default function ProjectsModal({ opened, onClose }) {
     const title = documentType === 'drawing' ? 'Untitled drawing' : 'Untitled'
     try {
       const doc = await createDocument(selectedProject.id, title, documentType)
-      await loadDocuments(selectedProject.id)
+      
+      // If switching to a different project, update the project context
+      if (selectedProject.id !== project?.id) {
+        await switchProject(selectedProject.id)
+      } else {
+        // Same project - just refresh documents in context
+        await refreshDocuments()
+      }
+      
       if (doc && doc.document_number) {
         // Store document number when navigating to new document (works for both text and drawing documents)
         setLastVisitedDocumentNumber(selectedProject.id, doc.document_number)
@@ -235,7 +243,7 @@ export default function ProjectsModal({ opened, onClose }) {
           ) : (
             <Text fw={500} size="sm" style={{ flex: 1 }}>Projects</Text>
           )}
-          {selectedProject && (
+          {selectedProject ? (
             <Group gap="xs" wrap="nowrap" style={{ flexShrink: 0 }}>
               <Menu shadow="md" position="bottom-end">
                 <Menu.Target>
@@ -274,6 +282,26 @@ export default function ProjectsModal({ opened, onClose }) {
                 </Menu.Dropdown>
               </Menu>
             </Group>
+          ) : (
+            <Button
+              variant="outline"
+              size="xs"
+              leftSection={<IconPlus size={14} />}
+              onClick={() => setAdding(true)}
+              sx={{
+                '@media (max-width: 768px)': {
+                  paddingLeft: '8px',
+                  paddingRight: '8px',
+                  '& .mantine-Button-inner': {
+                    '& > span:not(:first-child)': {
+                      display: 'none',
+                    },
+                  },
+                },
+              }}
+            >
+              New project
+            </Button>
           )}
         </Group>
       }
@@ -396,24 +424,8 @@ export default function ProjectsModal({ opened, onClose }) {
             </Center>
           ) : (
             <Stack gap="xs" style={{ width: '100%' }}>
-              {projects.map((p) => (
-                <Box
-                  key={p.id}
-                  onClick={() => handleSelectProject(p)}
-                  p="sm"
-                  className="sidebar-item"
-                  data-active={p.id === project?.id}
-                  style={{ width: '100%', boxSizing: 'border-box' }}
-                >
-                  <Group gap="sm" wrap="nowrap">
-                    <IconFolder size={18} color="var(--mantine-color-gray-6)" style={{ flexShrink: 0 }} />
-                    <Text size="sm" fw={p.id === project?.id ? 500 : 400} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{p.name}</Text>
-                  </Group>
-                </Box>
-              ))}
-              
-              {adding ? (
-                <Group gap="xs">
+              {adding && (
+                <Group gap="xs" p="sm" style={{ width: '100%', boxSizing: 'border-box' }}>
                   <IconFolder size={18} color="var(--mantine-color-gray-6)" />
                   <TextInput
                     placeholder="Project name"
@@ -439,19 +451,22 @@ export default function ProjectsModal({ opened, onClose }) {
                     <IconX size={14} />
                   </ActionIcon>
                 </Group>
-              ) : (
+              )}
+              {projects.map((p) => (
                 <Box
-                  onClick={() => setAdding(true)}
+                  key={p.id}
+                  onClick={() => handleSelectProject(p)}
                   p="sm"
                   className="sidebar-item"
+                  data-active={p.id === project?.id}
                   style={{ width: '100%', boxSizing: 'border-box' }}
                 >
                   <Group gap="sm" wrap="nowrap">
-                    <IconPlus size={18} color="var(--mantine-color-gray-6)" style={{ flexShrink: 0 }} />
-                    <Text size="sm" c="dimmed">New project</Text>
+                    <IconFolder size={18} color="var(--mantine-color-gray-6)" style={{ flexShrink: 0 }} />
+                    <Text size="sm" fw={p.id === project?.id ? 500 : 400} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{p.name}</Text>
                   </Group>
                 </Box>
-              )}
+              ))}
             </Stack>
           )}
         </Box>
