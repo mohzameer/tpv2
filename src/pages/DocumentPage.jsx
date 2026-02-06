@@ -103,6 +103,22 @@ export default function DocumentPage() {
     }
   }
 
+  // Update browser tab title when document changes
+  useEffect(() => {
+    if (document && document.title) {
+      window.document.title = `${document.title} - ThinkPost`
+    } else if (document) {
+      window.document.title = 'Untitled - ThinkPost'
+    } else {
+      window.document.title = 'ThinkPost'
+    }
+
+    // Reset to default on unmount
+    return () => {
+      window.document.title = 'ThinkPost'
+    }
+  }, [document])
+
   if (loading) {
     return (
       <Center style={{ height: '100%', width: '100%' }}>
