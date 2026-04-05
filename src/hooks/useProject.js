@@ -10,6 +10,12 @@ export function useProject() {
   const switchingRef = useRef(false)
   const lastUserIdRef = useRef(null) // Track last user ID to detect actual user changes
   const initialLoadRef = useRef(false) // Track if initial load has completed
+  const projectRef = useRef(null)
+  const initChainRef = useRef(Promise.resolve())
+
+  useEffect(() => {
+    projectRef.current = project
+  }, [project])
 
   useEffect(() => {
     initProject()
@@ -57,14 +63,36 @@ export function useProject() {
     }
   }
 
-  async function initProject() {
+  function initProject() {
     // Don't run if we're in the middle of switching projects
     if (switchingRef.current) {
-      return
+      return Promise.resolve()
     }
 
-    setLoading(true)
-    try {
+    initChainRef.current = initChainRef.current
+      .catch(() => {})
+      .then(async () => {
+        if (switchingRef.current) {
+          return
+        }
+
+        setLoading(true)
+        try {
+          await runInitProjectBody()
+        } catch (err) {
+          console.error('Failed to init project:', err)
+        } finally {
+          setLoading(false)
+        }
+      })
+      .catch((err) => {
+        console.error('initProject chain error:', err)
+      })
+
+    return initChainRef.current
+  }
+
+  async function runInitProjectBody() {
       let projects = await getProjects()
       console.log('[useProject] Available projects:', projects.length, projects.map(p => ({ id: p.id, name: p.name })))
       
@@ -81,8 +109,8 @@ export function useProject() {
       const urlProjectId = pathname.split('/').filter(Boolean)[0] // Get first path segment (projectId)
       
       // If current project already matches URL, don't change it (prevents flickering)
-      if (project && project.id === urlProjectId) {
-        setLoading(false)
+      const currentProj = projectRef.current
+      if (currentProj && urlProjectId && currentProj.id === urlProjectId) {
         return
       }
       
@@ -172,16 +200,11 @@ export function useProject() {
       // Create default document if none exists
       if (docs.length === 0) {
         console.log('[useProject] No documents found, creating default document')
-        const newDoc = await createDocument(currentProject.id, 'Untitled')
-        docs = [newDoc]
+        await createDocument(currentProject.id, 'Untitled')
+        docs = await getDocuments(currentProject.id)
       }
 
       setDocuments(docs)
-    } catch (err) {
-      console.error('Failed to init project:', err)
-    } finally {
-      setLoading(false)
-    }
   }
 
   async function addDocument(title = 'Untitled', documentType = 'text') {
@@ -236,8 +259,8 @@ export function useProject() {
       
       let docs = await getDocuments(targetProject.id)
       if (docs.length === 0) {
-        const newDoc = await createDocument(targetProject.id, 'Untitled')
-        docs = [newDoc]
+        await createDocument(targetProject.id, 'Untitled')
+        docs = await getDocuments(targetProject.id)
       }
       setDocuments(docs)
       
@@ -254,7 +277,7 @@ export function useProject() {
       
       // Persist the project selection with the target document
       // Store document number (works for both text and drawing documents)
-      if (targetDoc.document_number) {
+      if (targetDoc.document_number != null) {
         setLastVisitedDocumentNumber(targetProject.id, targetDoc.document_number)
       }
       

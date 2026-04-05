@@ -1,6 +1,32 @@
 # Migration Order
 
-This document outlines the correct order for running database migrations for the unified document architecture.
+## Supabase CLI (recommended)
+
+All SQL files in **this folder** (`supabase/migrations/`) are applied automatically in **lexicographic order** (the `YYYYMMDDHHMMSS_name.sql` prefix defines order). You do **not** need to run them by hand.
+
+**Local dev — wipe DB and reapply everything:**
+
+```bash
+cd /path/to/tpv2
+supabase start          # once, if the stack is not running
+supabase db reset       # drops local Postgres, runs every migration from scratch
+```
+
+**Hosted project — apply pending migrations only** (no full reset; backup production first):
+
+```bash
+supabase login
+supabase link --project-ref <your-project-ref>
+supabase db push
+```
+
+`document_number` (per-project numbering) is in `20260405100000_per_project_document_numbering.sql` in this folder. The older copies under repo root `migrations/0.3.0/` are the same logical migration kept for reference / manual `psql` runs.
+
+---
+
+## Manual subset (document architecture only)
+
+This section outlines the correct order if you run **only** the unified-document SQL files by hand (e.g. legacy workflow). The CLI already runs **all** migrations in this directory in timestamp order, including these:
 
 ## Migration Sequence
 

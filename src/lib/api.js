@@ -128,7 +128,7 @@ export async function claimGuestProjects() {
   }
   
   // Check how many projects exist with this specific guest_id
-  const { data: existingProjects, error: checkError } = await supabase
+  const { data, error: checkError } = await supabase
     .from('projects')
     .select('id, name, guest_id, owner_id')
     .eq('guest_id', guestId)
@@ -138,6 +138,8 @@ export async function claimGuestProjects() {
     console.error('claimGuestProjects: Error checking existing projects:', checkError)
     throw checkError
   }
+  
+  let existingProjects = data
   
   // If localStorage project needs claiming but wasn't in the query results, add it to the list
   if (localStorageProjectNeedsClaiming && localStorageProject && localStorageProject.guest_id === guestId) {
@@ -194,6 +196,47 @@ export async function deleteProject(id) {
 }
 
 // Documents
+/** Assigns document_number for rows missing it (DB trigger may be absent on older DBs). */
+async function ensureProjectDocumentNumbers(projectId) {
+  const { data: docs, error } = await supabase
+    .from('documents')
+    .select('*')
+    .eq('project_id', projectId)
+    .order('id', { ascending: true })
+  if (error) throw error
+  const list = docs || []
+  const missing = list.filter((d) => d.document_number == null || d.document_number === '')
+  if (missing.length === 0) return
+
+  const taken = new Set()
+  let max = 0
+  for (const d of list) {
+    const n = Number(d.document_number)
+    if (Number.isFinite(n)) {
+      taken.add(n)
+      if (n > max) max = n
+    }
+  }
+  let nextNum = taken.size === 0 ? 1 : max + 1
+
+  for (const d of missing) {
+    while (taken.has(nextNum)) nextNum++
+    const { error: upErr } = await supabase
+      .from('documents')
+      .update({ document_number: nextNum })
+      .eq('id', d.id)
+    if (upErr) {
+      console.warn(
+        'ensureProjectDocumentNumbers: could not set document_number (run DB migration 0.3.0?).',
+        upErr
+      )
+      return
+    }
+    taken.add(nextNum)
+    nextNum++
+  }
+}
+
 export async function getDocuments(projectId) {
   const { data, error } = await supabase
     .from('documents')
@@ -201,7 +244,19 @@ export async function getDocuments(projectId) {
     .eq('project_id', projectId)
     .order('sort_order', { ascending: true })
   if (error) throw error
-  return data
+  const list = data || []
+  const needsNumber = list.some((d) => d.document_number == null || d.document_number === '')
+  if (needsNumber && list.length > 0) {
+    await ensureProjectDocumentNumbers(projectId)
+    const { data: refreshed, error: err2 } = await supabase
+      .from('documents')
+      .select('*')
+      .eq('project_id', projectId)
+      .order('sort_order', { ascending: true })
+    if (err2) throw err2
+    return refreshed || list
+  }
+  return list
 }
 
 export async function getDocument(documentId) {
